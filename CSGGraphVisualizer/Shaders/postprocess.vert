@@ -1,6 +1,6 @@
 #version 410
 
-const vec2 pos[3] = vec2[3](vec2(-1), vec2(3,-1), vec2(-1,3));
+const vec2 pos[3] = vec2[3](vec2(-1,-1), vec2(3,-1), vec2(-1,3));
 
 layout(location = 0) out vec2 vs_out_tex;
 

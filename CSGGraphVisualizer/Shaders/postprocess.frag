@@ -9,12 +9,3 @@ void main()
 {
 	fs_out_col = texture(texFrame, fs_in_tex);
 }
-
-
-
-
-
-
-
-
-

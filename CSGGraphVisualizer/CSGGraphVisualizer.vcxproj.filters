@@ -9,4 +9,8 @@
   <ItemGroup>
     <ClCompile Include="main.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\raytrace.frag" />
+    <None Include="Shaders\raytrace.vert" />
+  </ItemGroup>
 </Project>
