@@ -130,11 +130,36 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="CodeGen\CodeGen.cpp" />
+    <ClCompile Include="CodeGen\Models\model1.cpp" />
+    <ClCompile Include="CodeGen\Models\model2.cpp" />
+    <ClCompile Include="CodeGen\Models\model3.cpp" />
+    <ClCompile Include="CodeGen\Models\model4.cpp" />
+    <ClCompile Include="CodeGen\Models\model5.cpp" />
+    <ClCompile Include="CodeGen\Models\model7.cpp" />
+    <ClCompile Include="CodeGen\Models\model8.cpp" />
+    <ClCompile Include="CodeGen\Models\model9.cpp" />
+    <ClCompile Include="CodeGen\Models\toys.cpp" />
+    <ClCompile Include="CodeGen\ObjectsUtil.cpp" />
+    <ClCompile Include="CodeGen\util.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Shaders\raytrace.frag" />
     <None Include="Shaders\raytrace.vert" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="CodeGen\bounding_opt.h" />
+    <ClInclude Include="CodeGen\CNF.h" />
+    <ClInclude Include="CodeGen\codegen.h" />
+    <ClInclude Include="CodeGen\expr.h" />
+    <ClInclude Include="CodeGen\Footmap.h" />
+    <ClInclude Include="CodeGen\material.h" />
+    <ClInclude Include="CodeGen\Material2.h" />
+    <ClInclude Include="CodeGen\Models\models.h" />
+    <ClInclude Include="CodeGen\Shadertoy.h" />
+    <ClInclude Include="CodeGen\ui.h" />
+    <ClInclude Include="CodeGen\util.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

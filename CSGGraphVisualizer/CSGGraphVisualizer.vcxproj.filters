@@ -5,12 +5,89 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="CodeGen">
+      <UniqueIdentifier>{22345eae-9f7e-4e51-91d9-776343d0d79b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CodeGen\Models">
+      <UniqueIdentifier>{ad223995-163b-495e-836e-66eb17a3509e}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="CodeGen\CodeGen.cpp">
+      <Filter>CodeGen</Filter>
+    </ClCompile>
+    <ClCompile Include="CodeGen\util.cpp">
+      <Filter>CodeGen</Filter>
+    </ClCompile>
+    <ClCompile Include="CodeGen\ObjectsUtil.cpp">
+      <Filter>CodeGen</Filter>
+    </ClCompile>
+    <ClCompile Include="CodeGen\Models\model1.cpp">
+      <Filter>CodeGen\Models</Filter>
+    </ClCompile>
+    <ClCompile Include="CodeGen\Models\model2.cpp">
+      <Filter>CodeGen\Models</Filter>
+    </ClCompile>
+    <ClCompile Include="CodeGen\Models\model3.cpp">
+      <Filter>CodeGen\Models</Filter>
+    </ClCompile>
+    <ClCompile Include="CodeGen\Models\model4.cpp">
+      <Filter>CodeGen\Models</Filter>
+    </ClCompile>
+    <ClCompile Include="CodeGen\Models\model5.cpp">
+      <Filter>CodeGen\Models</Filter>
+    </ClCompile>
+    <ClCompile Include="CodeGen\Models\model7.cpp">
+      <Filter>CodeGen\Models</Filter>
+    </ClCompile>
+    <ClCompile Include="CodeGen\Models\model8.cpp">
+      <Filter>CodeGen\Models</Filter>
+    </ClCompile>
+    <ClCompile Include="CodeGen\Models\model9.cpp">
+      <Filter>CodeGen\Models</Filter>
+    </ClCompile>
+    <ClCompile Include="CodeGen\Models\toys.cpp">
+      <Filter>CodeGen\Models</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="Shaders\raytrace.frag" />
     <None Include="Shaders\raytrace.vert" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="CodeGen\bounding_opt.h">
+      <Filter>CodeGen</Filter>
+    </ClInclude>
+    <ClInclude Include="CodeGen\CNF.h">
+      <Filter>CodeGen</Filter>
+    </ClInclude>
+    <ClInclude Include="CodeGen\codegen.h">
+      <Filter>CodeGen</Filter>
+    </ClInclude>
+    <ClInclude Include="CodeGen\expr.h">
+      <Filter>CodeGen</Filter>
+    </ClInclude>
+    <ClInclude Include="CodeGen\Footmap.h">
+      <Filter>CodeGen</Filter>
+    </ClInclude>
+    <ClInclude Include="CodeGen\material.h">
+      <Filter>CodeGen</Filter>
+    </ClInclude>
+    <ClInclude Include="CodeGen\Material2.h">
+      <Filter>CodeGen</Filter>
+    </ClInclude>
+    <ClInclude Include="CodeGen\Shadertoy.h">
+      <Filter>CodeGen</Filter>
+    </ClInclude>
+    <ClInclude Include="CodeGen\ui.h">
+      <Filter>CodeGen</Filter>
+    </ClInclude>
+    <ClInclude Include="CodeGen\util.h">
+      <Filter>CodeGen</Filter>
+    </ClInclude>
+    <ClInclude Include="CodeGen\Models\models.h">
+      <Filter>CodeGen\Models</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
