@@ -142,13 +142,24 @@
     <ClCompile Include="CodeGen\Models\toys.cpp" />
     <ClCompile Include="CodeGen\ObjectsUtil.cpp" />
     <ClCompile Include="CodeGen\util.cpp" />
+    <ClCompile Include="csg_node_DRAFT.cpp" />
+    <ClCompile Include="csg_tree_editor.cpp" />
+    <ClCompile Include="delete_this.cpp" />
+    <ClCompile Include="ImguiNodeEditor\crude_json.cpp" />
+    <ClCompile Include="ImguiNodeEditor\imgui_canvas.cpp" />
+    <ClCompile Include="ImguiNodeEditor\imgui_node_editor.cpp" />
+    <ClCompile Include="ImguiNodeEditor\imgui_node_editor_api.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="ImguiNodeEditor\imgui_bezier_math.inl" />
+    <None Include="ImguiNodeEditor\imgui_extra_math.inl" />
+    <None Include="ImguiNodeEditor\imgui_node_editor_internal.inl" />
     <None Include="Shaders\raytrace.frag" />
     <None Include="Shaders\raytrace.vert" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="application.h" />
     <ClInclude Include="CodeGen\bounding_opt.h" />
     <ClInclude Include="CodeGen\CNF.h" />
     <ClInclude Include="CodeGen\codegen.h" />
@@ -160,6 +171,12 @@
     <ClInclude Include="CodeGen\Shadertoy.h" />
     <ClInclude Include="CodeGen\ui.h" />
     <ClInclude Include="CodeGen\util.h" />
+    <ClInclude Include="ImguiNodeEditor\crude_json.h" />
+    <ClInclude Include="ImguiNodeEditor\imgui_bezier_math.h" />
+    <ClInclude Include="ImguiNodeEditor\imgui_canvas.h" />
+    <ClInclude Include="ImguiNodeEditor\imgui_extra_math.h" />
+    <ClInclude Include="ImguiNodeEditor\imgui_node_editor.h" />
+    <ClInclude Include="ImguiNodeEditor\imgui_node_editor_internal.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

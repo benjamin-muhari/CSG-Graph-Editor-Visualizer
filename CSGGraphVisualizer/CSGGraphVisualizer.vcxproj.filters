@@ -11,6 +11,9 @@
     <Filter Include="CodeGen\Models">
       <UniqueIdentifier>{ad223995-163b-495e-836e-66eb17a3509e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ImGuiNodeEditor">
+      <UniqueIdentifier>{221ca7be-8b60-46a3-993f-dda38a187cd7}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -50,10 +53,34 @@
     <ClCompile Include="CodeGen\Models\toys.cpp">
       <Filter>CodeGen\Models</Filter>
     </ClCompile>
+    <ClCompile Include="ImguiNodeEditor\crude_json.cpp">
+      <Filter>ImGuiNodeEditor</Filter>
+    </ClCompile>
+    <ClCompile Include="ImguiNodeEditor\imgui_canvas.cpp">
+      <Filter>ImGuiNodeEditor</Filter>
+    </ClCompile>
+    <ClCompile Include="ImguiNodeEditor\imgui_node_editor.cpp">
+      <Filter>ImGuiNodeEditor</Filter>
+    </ClCompile>
+    <ClCompile Include="ImguiNodeEditor\imgui_node_editor_api.cpp">
+      <Filter>ImGuiNodeEditor</Filter>
+    </ClCompile>
+    <ClCompile Include="csg_node_DRAFT.cpp" />
+    <ClCompile Include="csg_tree_editor.cpp" />
+    <ClCompile Include="delete_this.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Shaders\raytrace.frag" />
     <None Include="Shaders\raytrace.vert" />
+    <None Include="ImguiNodeEditor\imgui_bezier_math.inl">
+      <Filter>ImGuiNodeEditor</Filter>
+    </None>
+    <None Include="ImguiNodeEditor\imgui_extra_math.inl">
+      <Filter>ImGuiNodeEditor</Filter>
+    </None>
+    <None Include="ImguiNodeEditor\imgui_node_editor_internal.inl">
+      <Filter>ImGuiNodeEditor</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CodeGen\bounding_opt.h">
@@ -89,5 +116,24 @@
     <ClInclude Include="CodeGen\Models\models.h">
       <Filter>CodeGen\Models</Filter>
     </ClInclude>
+    <ClInclude Include="ImguiNodeEditor\crude_json.h">
+      <Filter>ImGuiNodeEditor</Filter>
+    </ClInclude>
+    <ClInclude Include="ImguiNodeEditor\imgui_bezier_math.h">
+      <Filter>ImGuiNodeEditor</Filter>
+    </ClInclude>
+    <ClInclude Include="ImguiNodeEditor\imgui_canvas.h">
+      <Filter>ImGuiNodeEditor</Filter>
+    </ClInclude>
+    <ClInclude Include="ImguiNodeEditor\imgui_extra_math.h">
+      <Filter>ImGuiNodeEditor</Filter>
+    </ClInclude>
+    <ClInclude Include="ImguiNodeEditor\imgui_node_editor.h">
+      <Filter>ImGuiNodeEditor</Filter>
+    </ClInclude>
+    <ClInclude Include="ImguiNodeEditor\imgui_node_editor_internal.h">
+      <Filter>ImGuiNodeEditor</Filter>
+    </ClInclude>
+    <ClInclude Include="application.h" />
   </ItemGroup>
 </Project>

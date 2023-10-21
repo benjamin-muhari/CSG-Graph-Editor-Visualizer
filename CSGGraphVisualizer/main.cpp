@@ -8,7 +8,7 @@
 
 #include <iostream>
 
-// #include "application.h"
+#include "application.h"
 
 void test1();
 void test_transforms();
@@ -49,7 +49,7 @@ void raytrace_demo()
 
 	auto begin = std::chrono::high_resolution_clock::now();
 
-	// Application_Initialize();
+	Application_Initialize();
 
 	sam.Run([&](float deltaTime) //delta time in ms
 		{
@@ -60,7 +60,7 @@ void raytrace_demo()
 			float ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count() / 1000.0;
 
 			//if (ms < 7.)
-			// Application_Frame(ms);
+			Application_Frame(ms);
 
 			df::Backbuffer << df::Clear() << raytraceProgram << "iResolution" << iResolution
 				<< "iTime" << ms
@@ -76,7 +76,7 @@ void raytrace_demo()
 		}
 	);
 
-	// Application_Finalize();
+	Application_Finalize();
 }
 
 void test_transforms()

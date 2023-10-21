@@ -1,5 +1,8 @@
 # GL Framework Gitignore
 
+sdf_editortest.cpp
+CSG_tree_editor.json
+
 *imgui.ini
 
 
