@@ -81,6 +81,7 @@ float box(vec3 p, vec3 b){ //from	https://www.iquilezles.org/www/articles/distfu
 // Infinite cylinders
 float cylinderZ(vec3 p, float r){ return length(p.xy) - r; }
 float cylinderY(vec3 p, float r){return cylinderZ(p.xzy,r);}
+float cylinderX(vec3 p, float r){return cylinderZ(p.zyx,r);}
 
 // Finite cylinders
 float cylinderZ(vec3 p, vec2 h){
@@ -88,6 +89,7 @@ float cylinderZ(vec3 p, vec2 h){
     return min(max(d.x, d.y), 0.) + length(max(d,0.));
 }
 float cylinderY(vec3 p, vec2 h){return cylinderZ(p.xzy,h);}
+float cylinderX(vec3 p, vec2 h){return cylinderZ(p.zyx,h);}
 
 // SDF
 
@@ -436,7 +438,8 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     }
     else
     {
-        col = Uncharted2ToneMapping(hitColorBRDF(ray, t)*0.55);
+		col = Uncharted2ToneMapping(hitColorBRDF(ray, t));
+//        col = Uncharted2ToneMapping(hitColorBRDF(ray, t)*0.55);
 //        col = hitColorBRDF(ray, t);
 //        col = hitColorBRDF(ray, t).xyz*3;
 //        col = vec3(n);
