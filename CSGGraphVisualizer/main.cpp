@@ -12,19 +12,20 @@
 
 void test1();
 void test_transforms();
-void raytrace_demo();
+void raytrace_generation_demo();
 
 int main(int argc, char* args[])
 {
 	//main2(argc,args);
 	//test_transforms();
-	raytrace_demo();
+	//raytrace_demo();
+	raytrace_generation_demo();
 	return 0;
 }
 
-void raytrace_demo()
+void raytrace_generation_demo()
 {
-	glm::vec2 iResolution{ 1024,768 };
+	glm::vec2 iResolution{ 620, 465 };
 	df::Sample sam("Ray Tracing Demo", iResolution.x, iResolution.y, df::Sample::FLAGS::DEFAULT);
 	// df::Sample simplifies OpenGL, SDL, ImGui, RenderDoc in the render loop, and handles user input via callback member functions in priority queues
 	df::Camera cam;								// Implements a camera event class with handles
@@ -38,8 +39,8 @@ void raytrace_demo()
 	df::TextureCube<> testCubemap("Assets/xpos.png", "Assets/xneg.png", "Assets/ypos.png", "Assets/yneg.png", "Assets/zpos.png", "Assets/zneg.png");
 	df::Texture2D<> testTex = testCubemap[df::X_POS]; // 2D view of a cubemap face
 
-	df::ShaderProgramEditorVF raytraceProgram = "Ray tracing demo shader program";
-	raytraceProgram << "Shaders/raytrace.vert"_vert << "Shaders/raytrace.frag"_frag << df::LinkProgram;
+	df::ShaderProgramEditorVF* raytraceProgram =  new df::ShaderProgramEditorVF("Ray tracing demo shader program");
+	*raytraceProgram << "Shaders/raytrace.vert"_vert << "Shaders/raytrace.frag"_frag << df::LinkProgram;
 
 	GL_CHECK; //extra opengl error checking in GPU Debug build configuration
 
@@ -48,31 +49,51 @@ void raytrace_demo()
 	cam.LookAt(glm::vec3(4, 4, -3));
 
 	auto begin = std::chrono::high_resolution_clock::now();
+	// Set time just to decide auto lol
+	auto bef_gen_time = std::chrono::high_resolution_clock::now();
 
 	Application_Initialize();
+
+	bool recompile = false;
+	int recompile_count = 0;
 
 	sam.Run([&](float deltaTime) //delta time in ms
 		{
 			cam.Update();
 
+			// Clock stuff
 			auto end = std::chrono::high_resolution_clock::now();
 			auto dur = end - begin;
 			float ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count() / 1000.0;
+			
+			// Recompile value of previous frame, runs if last frame recompiled
+			if (recompile)
+			{
+				auto aft_gen_time = std::chrono::high_resolution_clock::now();
+				auto gen_dur = aft_gen_time - bef_gen_time;
+				auto gen_dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(gen_dur).count();
+				std::cout << "Compilation #" << (++recompile_count) << " took :" << gen_dur_ms << "ms\n\n";
+			}
+				
+			bef_gen_time = std::chrono::high_resolution_clock::now();
+			recompile = Application_Frame();
+			if (recompile)
+			{
+				delete raytraceProgram;
+				raytraceProgram = new df::ShaderProgramEditorVF("Ray tracing demo shader program");
+				*raytraceProgram << "Shaders/raytrace.vert"_vert << "Shaders/gen_raytrace.frag"_frag << df::LinkProgram;
+			}
 
-			//if (ms < 7.)
-			Application_Frame(ms);
-
-			df::Backbuffer << df::Clear() << raytraceProgram << "iResolution" << iResolution
+			df::Backbuffer << df::Clear() << *raytraceProgram << "iResolution" << iResolution
 				<< "iTime" << ms
 				<< "texImg" << testTex
 				<< "cameraAt" << cam.GetAt()
 				<< "cameraPos" << cam.GetEye()
 				<< "cameraView" << cam.GetView();
-			//raytraceProgram << df::NoVao(GL_TRIANGLES, 3); // Rendering a pixel shader
-			raytraceProgram << demoVao;
+			*raytraceProgram << demoVao;
 
 			GL_CHECK;
-			raytraceProgram.Render();
+			raytraceProgram->Render();
 		}
 	);
 
@@ -140,7 +161,6 @@ void test1()
 		}
 	);
 }
-
 
 int main2(int argc, char* args[])
 {

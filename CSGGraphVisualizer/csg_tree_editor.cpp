@@ -1,624 +1,2285 @@
-﻿#include "ImguiNodeEditor/imgui_node_editor.h"
-#include "application.h"
+﻿#include "application.h"
+#include "ImguiNodeEditor/imgui_node_editor.h"
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include <ImGui/imgui_internal.h>
+#include "glm/glm.hpp"
 
 #include "CodeGen/expr.h"
 #include "CodeGen/codegen.h"
 #include "CodeGen/Material2.h"
-//#include "CodeGen/Objects/toys.cpp"
-#include <fstream>
-
-#include <string>
-#include <vector>
-
-#define GLM_FORCE_SWIZZLE
 #include "CodeGen/Models/models.h"
 #include "CodeGen/util.h"
 
-using namespace std;
-using namespace glm;
+#include <fstream>
+#include <string>
+#include <vector>
+
+// TODO: DELETE
+#include <iostream>
+
+#define GLM_FORCE_SWIZZLE
+
+//namespace CsgTreeEditor {
 
 namespace ed = ax::NodeEditor;
 
-enum class PrimitiveType
+// TODO: Most likely not needed
+enum class PinType
 {
-    Sphere,
-    Box,
-    CylinderY
+    Flow,
+    Bool,
+    Int,
+    Float,
+    String,
+    Object,
+    Function,
+    Delegate,
+    CsgUniversal
 };
 
-enum class OperationType
+enum class PinKind
 {
-    Union,
-    Intersection,
-    Substraction,
-    Translation,
-    Rotation,
-    Offset,
-    Scale
+    Output,
+    Input
 };
 
-enum class TransformType
+struct CsgNode;
+
+struct CsgPin
 {
-    Translation,
-    Rotation,
-    Scale
+    ed::PinId   ID;
+    ::Expr<CsgNode>*  Node;
+    // TODO: probably not needed, maybe logic around it
+    std::string Name;
+    // TODO: maybe not needed, maybe logic around it
+    PinType     Type;
+    PinKind     Kind;
+
+    CsgPin(int id, const char* name, PinType type = PinType::CsgUniversal) :
+        ID(id), Node(nullptr), Name(name), Type(type), Kind(PinKind::Input) {}
+    // ^ set pinkind when building node
 };
 
-struct CsgNode {
+struct CsgNode
+{
     ed::NodeId id;
+    std::vector<CsgPin> InputPins;
+    std::vector<CsgPin> OutputPins;
+
     int material;
+
+    CsgNode(int _id, int _material = 0) :
+        id(_id), material(_material) {}
+    CsgNode() : CsgNode(0, 0) {}
 };
 
-// Struct to hold basic information about connection between
-// pins. Note that connection (aka. link) has its own ID.
-// This is useful later with dealing with selections, deletion
-// or other operations.
-struct LinkInfo
+struct CsgLink
 {
-    ed::LinkId Id;
-    ed::PinId  InputId;
-    ed::PinId  OutputId;
+    ed::LinkId ID;
+
+    CsgPin* StartPin;
+    CsgPin* EndPin;
+
+    ImColor Color;
+
+    CsgLink(ed::LinkId id, CsgPin* startPin, CsgPin* endPin) :
+        ID(id), StartPin(startPin), EndPin(endPin), Color(255, 255, 255)
+    {
+    }
 };
 
-static ed::EditorContext*   g_Context = nullptr;    // Editor context, required to trace a editor state.
-static bool                 g_FirstFrame = true;    // Flag set for first frame only, some action need to be executed once.
-static ImVector<LinkInfo>   g_Links;                // List of live links. It is dynamic unless you want to create read-only view over nodes.
-static int                  g_NextLinkId = 100;     // Counter to help generate link ids. In real application this will probably based on pointer to user data structure.
+static Expr<CsgNode>* selected_root;
+static Expr<CsgNode>* everything_root;
+static bool graph_changed;
+static bool render_all = true; // TODO: add checkbox selector, default:false
+static bool generate_clicked; // TODO: change according to final logic generation/autogeneration logic
+
+// Save mouse position at the time of rightclick, because its weird if querried inside some imgui stuff
+static ImVec2 newNodePosition;
+
+
+// TODO: Test if need all, try delete ?
+#include <map>
+#include <algorithm> // ?
+#include <utility> // ?
+
+//asd;
+// TODO: delete
+//using namespace ax;
+//
+//  Deleted functionality 
+//void DrawPinIcon(const Pin& pin, bool connected, int alpha);
+// 
+//s_HeaderBackground = Application_LoadTexture("Data/BlueprintBackground.png");
+//s_SaveIcon = Application_LoadTexture("Data/ic_save_white_24dp.png");
+//s_RestoreIcon = Application_LoadTexture("Data/ic_restore_white_24dp.png");
+//
+//releaseTexture(s_RestoreIcon);
+//releaseTexture(s_SaveIcon);
+//releaseTexture(s_HeaderBackground);
+//
+//int saveIconWidth = Application_GetTextureWidth(s_SaveIcon);
+//int saveIconHeight = Application_GetTextureWidth(s_SaveIcon);
+//int restoreIconWidth = Application_GetTextureWidth(s_RestoreIcon);
+//int restoreIconHeight = Application_GetTextureWidth(s_RestoreIcon);
+//
+//  Works in v1.76, not v1.82wip, check demowindow maybe
+//ImGui::BeginHorizontal
+//ImGui::Spring();
+//ImGui::BeginVertical
+//
+//static ImTextureID          s_HeaderBackground = nullptr;
+//static ImTextureID          s_SampleImage = nullptr;
+//static ImTextureID          s_SaveIcon = nullptr;
+//static ImTextureID          s_RestoreIcon = nullptr;
+//
+//static inline ImRect ImGui_GetItemRect()
+//static inline ImRect ImRect_Expanded(const ImRect& rect, float x, float y)
+//
+
+
+
+
+// TODO: Delete all node logic
+enum class NodeType
+{
+    Blueprint,
+    Simple,
+    Tree,
+    Comment,
+    Houdini
+};
+
+struct Node;
+
+struct Pin
+{
+    ed::PinId   ID;
+    ::Node*     Node;
+    std::string Name;
+    PinType     Type;
+    PinKind     Kind;
+
+    Pin(int id, const char* name, PinType type) :
+        ID(id), Node(nullptr), Name(name), Type(type), Kind(PinKind::Input)
+    {
+    }
+};
+
+struct Node
+{
+    ed::NodeId ID;
+    std::string Name;
+    std::vector<Pin> Inputs;
+    std::vector<Pin> Outputs;
+    ImColor Color;
+    NodeType Type;
+    ImVec2 Size;
+
+    std::string State;
+    std::string SavedState;
+
+    Node(int id, const char* name, ImColor color = ImColor(255, 255, 255)) :
+        ID(id), Name(name), Color(color), Type(NodeType::Blueprint), Size(0, 0)
+    {
+    }
+};
+
+// TODO: Delete s_Nodes eventually, own logic
+static std::vector<Node>            s_Nodes;
+
+
+static ed::EditorContext* m_Editor = nullptr;
+
+static std::vector<CsgLink>         s_Links;
+static std::vector<Expr<CsgNode>*>  s_roots;
+
+
+struct NodeIdLess
+{
+    bool operator()(const ed::NodeId& lhs, const ed::NodeId& rhs) const
+    {
+        return lhs.AsPointer() < rhs.AsPointer();
+    }
+};
+
+static const float                              s_TouchTime = 1.0f;
+static std::map<ed::NodeId, float, NodeIdLess>  s_NodeTouchTime;
+
+// TODO: Maybe not here lol
+static int s_NextId = 1;
+static int GetNextId()
+{
+    return s_NextId++;
+}
+
+static void TouchNode(ed::NodeId id)
+{
+    s_NodeTouchTime[id] = s_TouchTime;
+}
+
+static float GetTouchProgress(ed::NodeId id)
+{
+    auto it = s_NodeTouchTime.find(id);
+    if (it != s_NodeTouchTime.end() && it->second > 0.0f)
+        return (s_TouchTime - it->second) / s_TouchTime;
+    else
+        return 0.0f;
+}
+
+static void UpdateTouch()
+{
+    const auto deltaTime = ImGui::GetIO().DeltaTime;
+    for (auto& entry : s_NodeTouchTime)
+    {
+        if (entry.second > 0.0f)
+            entry.second -= deltaTime;
+    }
+}
+
+static CsgLink* FindLink(ed::LinkId id)
+{
+    for (auto& link : s_Links)
+        if (link.ID == id)
+            return &link;
+
+    return nullptr;
+}
+
+// TODO: Delete eventually, own logic
+static Node* FindNode(ed::NodeId id)
+{
+    for (auto& node : s_Nodes)
+        if (node.ID == id)
+            return &node;
+
+    return nullptr;
+}
+
+// TODO: Delete eventually, own logic
+static Pin* FindPin(ed::PinId id)
+{
+    if (!id)
+        return nullptr;
+
+    for (auto& node : s_Nodes)
+    {
+        for (auto& pin : node.Inputs)
+            if (pin.ID == id)
+                return &pin;
+
+        for (auto& pin : node.Outputs)
+            if (pin.ID == id)
+                return &pin;
+    }
+
+    return nullptr;
+}
+
+template<typename Fields>
+struct FindNodeVisitor
+{
+    ed::NodeId id;
+    Expr<Fields>* self;
+
+    Expr<Fields>* operator()(Box<Fields>& expr)
+    {
+        if (expr.id == id)
+            return self;
+        return nullptr;
+    }
+    Expr<Fields>* operator()(Sphere<Fields>& expr)
+    {
+        if (expr.id == id)
+            return self;
+        return nullptr;
+    }
+    Expr<Fields>* operator()(Cylinder<Fields>& expr)
+    {
+        if (expr.id == id)
+            return self;
+        return nullptr;
+    }
+    Expr<Fields>* operator()(PlaneXZ<Fields>& expr)
+    {
+        if (expr.id == id)
+            return self;
+        return nullptr;
+    }
+    //--------------------------------------------------------------
+    //--------------------------------------------------------------
+    Expr<Fields>* operator()(Move<Fields>& expr)
+    {
+        if (expr.id == id)
+            return self;
+        if (expr.a != nullptr)
+        {
+            self = expr.a;
+            // TODO: potential memory leak, not really tho
+            return visit(*this, *expr.a);
+        }
+
+        return nullptr;
+    }
+    Expr<Fields>* operator()(Rotate<Fields>& expr)
+    {
+        if (expr.id == id)
+            return self;
+        if (expr.a != nullptr)
+        {
+            self = expr.a;
+            return visit(*this, *expr.a);
+        }
+        return nullptr;
+    }
+    Expr<Fields>* operator()(Offset<Fields>& expr)
+    {
+        if (expr.id == id)
+            return self;
+        if (expr.a != nullptr)
+        {
+            self = expr.a;
+            return visit(*this, *expr.a);
+        }
+        return nullptr;
+    }
+    Expr<Fields>* operator()(Invert<Fields>& expr)
+    {
+        if (expr.id == id)
+            return self;
+        if (expr.a != nullptr)
+        {
+            self = expr.a;
+            return visit(*this, *expr.a);
+        }
+        return nullptr;
+    }
+    //--------------------------------------------------------------
+    //--------------------------------------------------------------
+    Expr<Fields>* operator()(Intersect<Fields>& expr)
+    {
+        if (expr.id == id)
+            return self;
+        else
+        {
+            Expr<Fields>* result;
+            for (auto& leaf : expr.a)
+            {
+                self = leaf;
+                result = visit(*this, *leaf);
+                if (result != nullptr)
+                    return result;
+            }
+            // return null if pin not found on any leaves
+            return nullptr;
+        }
+    }
+    Expr<Fields>* operator()(Union<Fields>& expr)
+    {
+        if (expr.id == id)
+            return self;
+        else
+        {
+            Expr<Fields>* result;
+            for (auto& leaf : expr.a)
+            {
+                self = leaf;
+                result = visit(*this, *leaf);
+                if (result != nullptr)
+                    return result;
+            }
+            // return null if pin not found on any leaves
+            return nullptr;
+        }
+    }
+};
+
+static void SelectRootNode()
+{
+    std::vector<ed::NodeId> selectedNodes;
+    selectedNodes.resize(ed::GetSelectedObjectCount());
+    int nodeCount = ed::GetSelectedNodes(selectedNodes.data(), static_cast<int>(selectedNodes.size()));
+    selectedNodes.resize(nodeCount);
+
+    if (selectedNodes.size() == 0)
+        return;
+
+    ed::NodeId first_selected = selectedNodes[0];
+    for (auto& root : s_roots)
+    {
+        selected_root = std::visit(FindNodeVisitor<CsgNode>{ first_selected, root }, *root);
+        if (selected_root != nullptr)
+            return;
+    }
+    selected_root = nullptr;
+}
+
+static void SelectAllRoots()
+{
+    // TODO: where/how to do this, dont delete, update when roots change
+    delete everything_root;
+    // TODO: vector in union should be a pointer
+    everything_root = new Expr<CsgNode>{ Union<CsgNode>{CsgNode{ GetNextId() }, s_roots} };
+
+    selected_root = everything_root;
+}
+
+static bool GenerateSdf();
+
+static void AutoGenerateSdf()
+{
+    SelectAllRoots();
+    GenerateSdf();
+}
+
+static void ClickGenerateSdf()
+{
+    SelectRootNode();
+    // TODO delete, ^uncomment & use
+    //SelectAllRoots();
+    generate_clicked = GenerateSdf();
+}
+
+static void PerfTestGenerateSdf(int count)
+{
+    selected_root = new Expr<CsgNode>{ Union<CsgNode>{CsgNode{ GetNextId() },s_roots} };
+
+    for (int i = 0; i < count; i++)
+        std::get<Union<CsgNode>>(*selected_root).a.emplace_back(sphere((float)i, CsgNode{ GetNextId() }));
+
+    GenerateSdf();
+    delete selected_root;
+    // TODO: delete union members, memory leak currently
+}
+
+static bool GenerateSdf()
+{
+    if (selected_root == nullptr)
+        return false;
+
+    const std::string glsl_prefix = "// Start of generated GLSL code\n";
+    const std::string glsl_postfix = "// End of generated GLSL code\n";
+
+    //std::ofstream kernel("sdf_editortest.cpp");
+    //std::ofstream kernel("Shaders/gen_raytrace.frag");
+    //kernel << glsl_prefix << sdf(*selected_root) << "\n" << material2(*selected_root) << glsl_postfix;
+
+    //// TODO: Writes char by char, no lines, maybe faster if fixed
+    //// TODO: open/close?
+    //std::ifstream prefix_file("Shaders/raytrace.frag.template.prefix");
+    //std::ifstream postfix_file("Shaders/raytrace.frag.template.postfix");
+    //std::ofstream result("Shaders/gen_raytrace.frag");
+    //char ch;
+    //while (!prefix_file.eof())
+    //{
+    //    prefix_file >> ch;
+    //    result << ch;
+    //}
+
+    //result << glsl_prefix << sdf(*selected_root) << "\n" << material2(*selected_root) << glsl_postfix;    
+    //
+    //while (!postfix_file.eof())
+    //{
+    //    postfix_file >> ch;
+    //    result << ch;
+    //}
+
+    std::string buff; //str1 for fetching string line from file 1 and str2 for fetching string from file2
+
+    std::ifstream prefix_file("Shaders/raytrace.frag.template.prefix");
+    std::ifstream postfix_file("Shaders/raytrace.frag.template.postfix");
+    std::ofstream result("Shaders/gen_raytrace.frag");
+
+    while (std::getline(prefix_file, buff)) {
+        result << buff;
+        result << "\n";
+    }
+
+    result << "\n" << glsl_prefix << sdf(*selected_root) << "\n" << material2(*selected_root) << glsl_postfix;
+
+    while (std::getline(postfix_file, buff)) {
+        result << buff;
+        result << "\n";
+    }
+
+    // TODO: where to put; works already, but more logical place
+    graph_changed = true;
+    // dont delete since visitor returning &self now instead of new Expr
+    //delete selected_root;
+
+    // TODO: nicer code/comment, delete elsewhere
+    //if (everything_root)
+    //{
+    //    delete everything_root;
+    //    everything_root = nullptr
+    //}
+
+    // Dont deselect the root TODO: maybe change/better
+    //selected_root = nullptr;
+    //ed::ClearSelection();
+
+    return true;
+}
+
+template<typename Fields>
+struct FindPinVisitor
+{
+    ed::PinId id;
+
+    CsgPin* FindPin(std::vector<CsgPin>& inputs, std::vector<CsgPin>& outputs)
+    {
+        for (CsgPin& pin : inputs)
+        {
+            if (pin.ID == id)
+                return &pin;
+        }
+        for (CsgPin& pin : outputs)
+        {
+            if (pin.ID == id)
+                return &pin;
+        }
+        // return null if not found
+        return nullptr;
+    }
+    // --------------------------------------------------------
+    // --------------------------------------------------------
+    CsgPin* operator()(Box<Fields>& expr)
+    {
+        return FindPin(expr.InputPins, expr.OutputPins);
+    }
+    CsgPin* operator()(Sphere<Fields>& expr)
+    {
+        return FindPin(expr.InputPins, expr.OutputPins);
+    }
+    CsgPin* operator()(Cylinder<Fields>& expr)
+    {
+        return FindPin(expr.InputPins, expr.OutputPins);
+    }
+    CsgPin* operator()(PlaneXZ<Fields>& expr)
+    {
+        return FindPin(expr.InputPins, expr.OutputPins);
+    }
+    // --------------------------------------------------------
+    // --------------------------------------------------------
+    CsgPin* operator()(Move<Fields>& expr)
+    {
+        CsgPin* pin = FindPin(expr.InputPins, expr.OutputPins);
+        if (pin != nullptr)
+            return pin;
+        if (expr.a != nullptr)
+            return visit(*this, *expr.a);
+        return nullptr;
+    }
+    CsgPin* operator()(Rotate<Fields>& expr)
+    {
+        CsgPin* pin = FindPin(expr.InputPins, expr.OutputPins);
+        if (pin != nullptr)
+            return pin;
+        if (expr.a != nullptr)
+            return visit(*this, *expr.a);
+        return nullptr;
+    }
+    CsgPin* operator()(Offset<Fields>& expr)
+    {
+        CsgPin* pin = FindPin(expr.InputPins, expr.OutputPins);
+        if (pin != nullptr)
+            return pin;
+        if (expr.a != nullptr)
+            return visit(*this, *expr.a);
+        return nullptr;
+    }
+    CsgPin* operator()(Invert<Fields>& expr)
+    {
+        CsgPin* pin = FindPin(expr.InputPins, expr.OutputPins);
+        if (pin != nullptr)
+            return pin;
+        if (expr.a != nullptr)
+            return visit(*this, *expr.a);
+        return nullptr;
+    }
+    // --------------------------------------------------------
+    // --------------------------------------------------------
+    CsgPin* operator()(Intersect<Fields>& expr)
+    {
+        CsgPin* pin = FindPin(expr.InputPins, expr.OutputPins);
+        if (pin != nullptr)
+            return pin;
+        else
+        {
+            for (auto& leaf : expr.a)
+            {
+                pin = visit(*this, *leaf);
+                if (pin != nullptr)
+                    return pin;
+            }
+            // return null if pin not found on any leaves
+            return nullptr;
+        }
+    }
+    CsgPin* operator()(Union<Fields>& expr)
+    {
+        CsgPin* pin = FindPin(expr.InputPins, expr.OutputPins);
+        if (pin != nullptr)
+            return pin;
+        else
+        {
+            for (auto& leaf : expr.a)
+            {
+                pin = visit(*this, *leaf);
+                if (pin != nullptr)
+                    return pin;
+            }
+            // return null if pin not found on any leaves
+            return nullptr;
+        }
+    }
+};
+
+// Returns the pin object corresponding to the given id
+static CsgPin* FindPinCsg(ed::PinId id)
+{
+    if (!id)
+        return nullptr;
+
+    for (auto& root : s_roots)
+    {
+        // TODO: create visitor obj outside of the loop
+        auto result = visit(FindPinVisitor<CsgNode>{id}, *root);
+        if (result != nullptr)
+            return result;
+    }
+
+    return nullptr;
+}
+
+// TODO: Unused functions
+
+// Return the link starting from an OutputPin, if one exists
+// CsgLink* OutputPinsLink(ed::PinId id)
+//{
+//    if (!id)
+//        return nullptr;
+//    for (auto& link : s_Links)
+//        // Check only StartPins aka Node->OutputPins
+//        if (link.StartPin->ID == id)
+//            return &link;
+//    return nullptr;
+//}
+
+//static bool IsPinLinked(ed::PinId id)
+//{
+//    if (!id)
+//        return false;
+//
+//    for (auto& link : s_Links)
+//        if (link.StartPin->ID == id || link.EndPin->ID == id)
+//            return true;
+//
+//    return false;
+//}
+//
+//static bool CanCreateLink(Pin* a, Pin* b)
+//{
+//    if (!a || !b || a == b || a->Kind == b->Kind || a->Type != b->Type || a->Node == b->Node)
+//        return false;
+//
+//    return true;
+//}
+
+static void BuildCsgNode(Expr<CsgNode>* node)
+{
+    auto inputs = std::visit([](auto& n) {return &n.InputPins; }, *node);
+    auto outputs = std::visit([](auto& n) {return &n.OutputPins; }, *node);
+    for (auto& input : *inputs)
+    {
+        input.Node = node;
+        input.Kind = PinKind::Input;
+    }
+    for (auto& output : *outputs)
+    {
+        output.Node = node;
+        output.Kind = PinKind::Output;
+    }
+}
 
 const char* Application_GetName()
 {
-    return "CSG tree editor";
+    return "CSG Graph Visualizer";
 }
 
 void Application_Initialize()
 {
     ed::Config config;
-    config.SettingsFile = "CSG_tree_editor.json";
-    g_Context = ed::CreateEditor(&config);
+
+    config.SettingsFile = "CSG_Graph_Visualizer.json";
+
+    config.LoadNodeSettings = [](ed::NodeId nodeId, char* data, void* userPointer) -> size_t
+    {
+        auto node = FindNode(nodeId);
+        if (!node)
+            return 0;
+
+        if (data != nullptr)
+            memcpy(data, node->State.data(), node->State.size());
+        return node->State.size();
+    };
+
+    config.SaveNodeSettings = [](ed::NodeId nodeId, const char* data, size_t size, ed::SaveReasonFlags reason, void* userPointer) -> bool
+    {
+        auto node = FindNode(nodeId);
+        if (!node)
+            return false;
+
+        node->State.assign(data, size);
+
+        TouchNode(nodeId);
+
+        return true;
+    };
+
+    m_Editor = ed::CreateEditor(&config);
+    ed::SetCurrentEditor(m_Editor);
+
+    //Node* node;
+    //node = SpawnInputActionNode();      ed::SetNodePosition(node->ID, ImVec2(-252, 220));
+    //node = SpawnBranchNode();           ed::SetNodePosition(node->ID, ImVec2(-300, 351));
+    //etc..
+
+    ed::NavigateToContent();
+
+    // TODO: Did i comment this?
+    //auto& io = ImGui::GetIO();
 }
 
 void Application_Finalize()
 {
-    ed::DestroyEditor(g_Context);
-}
-
-void ImGuiEx_BeginColumn()
-{
-    ImGui::BeginGroup();
-}
-
-void ImGuiEx_NextColumn()
-{
-    ImGui::EndGroup();
-    ImGui::SameLine();
-    ImGui::BeginGroup();
-}
-
-void ImGuiEx_EndColumn()
-{
-    ImGui::EndGroup();
-}
-
-void Create_Operation_Node(int& uniqueId, const char* type, ImVec2 pos)
-{
-    ed::NodeId nodeA_Id = uniqueId++;
-    ed::PinId  nodeA_InputPinId = uniqueId++;
-    ed::PinId  nodeA_InputPinId_2 = uniqueId++;
-    ed::PinId  nodeA_OutputPinId = uniqueId++;
-
-    if (g_FirstFrame)
-        ed::SetNodePosition(nodeA_Id, pos);
-    ed::BeginNode(nodeA_Id);
-    ImGui::Text(type);
-
-    ed::BeginPin(nodeA_InputPinId, ed::PinKind::Input);
-    ImGui::Text(">  ");
-    ed::EndPin();
-
-    ImGui::SameLine();
-    ed::BeginPin(nodeA_OutputPinId, ed::PinKind::Output);
-    ImGui::Text("Result");
-    ed::EndPin();
-
-    ed::BeginPin(nodeA_InputPinId_2, ed::PinKind::Input);
-    ImGui::Text(">  ");
-    ed::EndPin();
-
-    ed::EndNode();
-}
-
-void Create_Primitive_Node(int& uniqueId, PrimitiveType type, ImVec2 node_pos)
-{
-    ImGui::PushItemWidth(150);
-
-    ed::NodeId node_Id = uniqueId++;
-    ed::PinId  node_OutputPinId = uniqueId++;
-    ed::PinId  node_TransformPinId = uniqueId++;
-
-    if (g_FirstFrame)
-        ed::SetNodePosition(node_Id, node_pos);    
-    ed::BeginNode(node_Id);    
-    std::string type_s;
-    switch (type) {
-        case (PrimitiveType::Box):
-            type_s = "Box";
-            break;
-        case (PrimitiveType::CylinderY):
-            type_s = "CylinderY";
-            break;
-        case (PrimitiveType::Sphere):
-            type_s = "Sphere";
-            break;
+    if (m_Editor)
+    {
+        ed::DestroyEditor(m_Editor);
+        m_Editor = nullptr;
     }
-    ImGui::Text(type_s.c_str());
+}
 
+static bool Splitter(bool split_vertically, float thickness, float* size1, float* size2, float min_size1, float min_size2, float splitter_long_axis_size = -1.0f)
+{
+    using namespace ImGui;
+    ImGuiContext& g = *GImGui;
+    ImGuiWindow* window = g.CurrentWindow;
+    ImGuiID id = window->GetID("##Splitter");
+    ImRect bb;
+    bb.Min = window->DC.CursorPos + (split_vertically ? ImVec2(*size1, 0.0f) : ImVec2(0.0f, *size1));
+    bb.Max = bb.Min + CalcItemSize(split_vertically ? ImVec2(thickness, splitter_long_axis_size) : ImVec2(splitter_long_axis_size, thickness), 0.0f, 0.0f);
+    return SplitterBehavior(bb, id, split_vertically ? ImGuiAxis_X : ImGuiAxis_Y, size1, size2, min_size1, min_size2, 0.0f);
+}
+
+ImColor GetIconColor(PinType type)
+{
+    switch (type)
+    {
+    default:
+    case PinType::Flow:     return ImColor(255, 255, 255);
+    case PinType::Bool:     return ImColor(220, 48, 48);
+    case PinType::Int:      return ImColor(68, 201, 156);
+    case PinType::Float:    return ImColor(147, 226, 74);
+    case PinType::String:   return ImColor(124, 21, 153);
+    case PinType::Object:   return ImColor(51, 150, 215);
+    case PinType::Function: return ImColor(218, 0, 183);
+    case PinType::Delegate: return ImColor(255, 48, 48);
+    }
+};
+    
+void ShowStyleEditor(bool* show = nullptr)
+{
+    if (!ImGui::Begin("Style", show))
+    {
+        ImGui::End();
+        return;
+    }
+
+    auto paneWidth = ImGui::GetContentRegionAvailWidth();
+
+    auto& editorStyle = ed::GetStyle();
+    //ImGui::BeginHorizontal("Style buttons", ImVec2(paneWidth, 0), 1.0f);
+    ImGui::TextUnformatted("Values");
+    //ImGui::Spring();
+    if (ImGui::Button("Reset to defaults"))
+        editorStyle = ed::Style();
+    //ImGui::EndHorizontal();
+    ImGui::Spacing();
+    ImGui::DragFloat4("Node Padding", &editorStyle.NodePadding.x, 0.1f, 0.0f, 40.0f);
+    ImGui::DragFloat("Node Rounding", &editorStyle.NodeRounding, 0.1f, 0.0f, 40.0f);
+    ImGui::DragFloat("Node Border Width", &editorStyle.NodeBorderWidth, 0.1f, 0.0f, 15.0f);
+    ImGui::DragFloat("Hovered Node Border Width", &editorStyle.HoveredNodeBorderWidth, 0.1f, 0.0f, 15.0f);
+    ImGui::DragFloat("Selected Node Border Width", &editorStyle.SelectedNodeBorderWidth, 0.1f, 0.0f, 15.0f);
+    ImGui::DragFloat("Pin Rounding", &editorStyle.PinRounding, 0.1f, 0.0f, 40.0f);
+    ImGui::DragFloat("Pin Border Width", &editorStyle.PinBorderWidth, 0.1f, 0.0f, 15.0f);
+    ImGui::DragFloat("Link Strength", &editorStyle.LinkStrength, 1.0f, 0.0f, 500.0f);
+    //ImVec2  SourceDirection;
+    //ImVec2  TargetDirection;
+    ImGui::DragFloat("Scroll Duration", &editorStyle.ScrollDuration, 0.001f, 0.0f, 2.0f);
+    ImGui::DragFloat("Flow Marker Distance", &editorStyle.FlowMarkerDistance, 1.0f, 1.0f, 200.0f);
+    ImGui::DragFloat("Flow Speed", &editorStyle.FlowSpeed, 1.0f, 1.0f, 2000.0f);
+    ImGui::DragFloat("Flow Duration", &editorStyle.FlowDuration, 0.001f, 0.0f, 5.0f);
+    //ImVec2  PivotAlignment;
+    //ImVec2  PivotSize;
+    //ImVec2  PivotScale;
+    //float   PinCorners;
+    //float   PinRadius;
+    //float   PinArrowSize;
+    //float   PinArrowWidth;
+    ImGui::DragFloat("Group Rounding", &editorStyle.GroupRounding, 0.1f, 0.0f, 40.0f);
+    ImGui::DragFloat("Group Border Width", &editorStyle.GroupBorderWidth, 0.1f, 0.0f, 15.0f);
+
+    ImGui::Separator();
+
+    static ImGuiColorEditFlags edit_mode = ImGuiColorEditFlags_RGB;
+    //ImGui::BeginHorizontal("Color Mode", ImVec2(paneWidth, 0), 1.0f);
+    ImGui::TextUnformatted("Filter Colors");
+    //ImGui::Spring();
+    ImGui::RadioButton("RGB", &edit_mode, ImGuiColorEditFlags_RGB);
+    //ImGui::Spring(0);
+    ImGui::RadioButton("HSV", &edit_mode, ImGuiColorEditFlags_HSV);
+    //ImGui::Spring(0);
+    ImGui::RadioButton("HEX", &edit_mode, ImGuiColorEditFlags_HEX);
+    //ImGui::EndHorizontal();
+
+    static ImGuiTextFilter filter;
+    filter.Draw("", paneWidth);
+
+    ImGui::Spacing();
+
+    ImGui::PushItemWidth(-160);
+    for (int i = 0; i < ed::StyleColor_Count; ++i)
+    {
+        auto name = ed::GetStyleColorName((ed::StyleColor)i);
+        if (!filter.PassFilter(name))
+            continue;
+
+        ImGui::ColorEdit4(name, &editorStyle.Colors[i].x, edit_mode);
+    }
+    ImGui::PopItemWidth();
+
+    ImGui::End();
+}
+
+void ShowLeftPane(float paneWidth)
+{
+    auto& io = ImGui::GetIO();
+
+    ImGui::BeginChild("Selection", ImVec2(paneWidth, 0));
+
+    paneWidth = ImGui::GetContentRegionAvailWidth();
+
+    static bool showStyleEditor = false;
+    //ImGui::BeginHorizontal("Style Editor", ImVec2(paneWidth, 0));
+    //ImGui::Spring(0.0f, 0.0f);
+    if (ImGui::Button("Zoom to Content"))
+        ed::NavigateToContent();
+    //ImGui::Spring(0.0f);
+    if (ImGui::Button("Show Flow"))
+    {
+        for (auto& link : s_Links)
+            ed::Flow(link.ID);
+    }
+    //ImGui::Spring();
+
+    // TODO_TEMP uncomment if needed
+    //if (ImGui::Button("Edit Style"))
+    //    showStyleEditor = true;
+    ////ImGui::EndHorizontal();
+
+    //if (showStyleEditor)
+    //    ShowStyleEditor(&showStyleEditor);
+
+    std::vector<ed::NodeId> selectedNodes;
+    std::vector<ed::LinkId> selectedLinks;
+    selectedNodes.resize(ed::GetSelectedObjectCount());
+    selectedLinks.resize(ed::GetSelectedObjectCount());
+
+    int nodeCount = ed::GetSelectedNodes(selectedNodes.data(), static_cast<int>(selectedNodes.size()));
+    int linkCount = ed::GetSelectedLinks(selectedLinks.data(), static_cast<int>(selectedLinks.size()));
+
+    selectedNodes.resize(nodeCount);
+    selectedLinks.resize(linkCount);
+
+    ImGui::GetWindowDrawList()->AddRectFilled(
+        ImGui::GetCursorScreenPos(),
+        ImGui::GetCursorScreenPos() + ImVec2(paneWidth, ImGui::GetTextLineHeight()),
+        ImColor(ImGui::GetStyle().Colors[ImGuiCol_HeaderActive]), ImGui::GetTextLineHeight() * 0.25f);
+    ImGui::Spacing(); ImGui::SameLine();
+    ImGui::TextUnformatted("Nodes");
+    ImGui::Indent();
+    for (auto& node : s_Nodes)
+    {
+        ImGui::PushID(node.ID.AsPointer());
+        auto start = ImGui::GetCursorScreenPos();
+
+        if (const auto progress = GetTouchProgress(node.ID))
+        {
+            ImGui::GetWindowDrawList()->AddLine(
+                start + ImVec2(-8, 0),
+                start + ImVec2(-8, ImGui::GetTextLineHeight()),
+                IM_COL32(255, 0, 0, 255 - (int)(255 * progress)), 4.0f);
+        }
+
+        bool isSelected = std::find(selectedNodes.begin(), selectedNodes.end(), node.ID) != selectedNodes.end();
+        if (ImGui::Selectable((node.Name + "##" + std::to_string(reinterpret_cast<uintptr_t>(node.ID.AsPointer()))).c_str(), &isSelected))
+        {
+            if (io.KeyCtrl)
+            {
+                if (isSelected)
+                    ed::SelectNode(node.ID, true);
+                else
+                    ed::DeselectNode(node.ID);
+            }
+            else
+                ed::SelectNode(node.ID, false);
+
+            ed::NavigateToSelection();
+        }
+        if (ImGui::IsItemHovered() && !node.State.empty())
+            ImGui::SetTooltip("State: %s", node.State.c_str());
+
+        //auto id = std::string("(") + std::to_string(reinterpret_cast<uintptr_t>(node.ID.AsPointer())) + ")";
+        //auto textSize = ImGui::CalcTextSize(id.c_str(), nullptr);
+        //auto iconPanelPos = start + ImVec2(
+        //    paneWidth - ImGui::GetStyle().FramePadding.x - ImGui::GetStyle().IndentSpacing - saveIconWidth - restoreIconWidth - ImGui::GetStyle().ItemInnerSpacing.x * 1,
+        //    (ImGui::GetTextLineHeight() - saveIconHeight) / 2);
+        //ImGui::GetWindowDrawList()->AddText(
+        //    ImVec2(iconPanelPos.x - textSize.x - ImGui::GetStyle().ItemInnerSpacing.x, start.y),
+        //    IM_COL32(255, 255, 255, 255), id.c_str(), nullptr);
+
+        //auto drawList = ImGui::GetWindowDrawList();
+        //ImGui::SetCursorScreenPos(iconPanelPos);
+        //ImGui::SetItemAllowOverlap();
+        //if (node.SavedState.empty())
+        //{
+        //    if (ImGui::InvisibleButton("save", ImVec2((float)saveIconWidth, (float)saveIconHeight)))
+        //        node.SavedState = node.State;
+
+        //    if (ImGui::IsItemActive())
+        //        drawList->AddImage(s_SaveIcon, ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImVec2(0, 0), ImVec2(1, 1), IM_COL32(255, 255, 255, 96));
+        //    else if (ImGui::IsItemHovered())
+        //        drawList->AddImage(s_SaveIcon, ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImVec2(0, 0), ImVec2(1, 1), IM_COL32(255, 255, 255, 255));
+        //    else
+        //        drawList->AddImage(s_SaveIcon, ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImVec2(0, 0), ImVec2(1, 1), IM_COL32(255, 255, 255, 160));
+        //}
+        //else
+        //{
+        //    ImGui::Dummy(ImVec2((float)saveIconWidth, (float)saveIconHeight));
+        //    drawList->AddImage(s_SaveIcon, ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImVec2(0, 0), ImVec2(1, 1), IM_COL32(255, 255, 255, 32));
+        //}
+
+        //ImGui::SameLine(0, ImGui::GetStyle().ItemInnerSpacing.x);
+        //ImGui::SetItemAllowOverlap();
+        //if (!node.SavedState.empty())
+        //{
+        //    if (ImGui::InvisibleButton("restore", ImVec2((float)restoreIconWidth, (float)restoreIconHeight)))
+        //    {
+        //        node.State = node.SavedState;
+        //        ed::RestoreNodeState(node.ID);
+        //        node.SavedState.clear();
+        //    }
+
+        //    if (ImGui::IsItemActive())
+        //        drawList->AddImage(s_RestoreIcon, ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImVec2(0, 0), ImVec2(1, 1), IM_COL32(255, 255, 255, 96));
+        //    else if (ImGui::IsItemHovered())
+        //        drawList->AddImage(s_RestoreIcon, ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImVec2(0, 0), ImVec2(1, 1), IM_COL32(255, 255, 255, 255));
+        //    else
+        //        drawList->AddImage(s_RestoreIcon, ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImVec2(0, 0), ImVec2(1, 1), IM_COL32(255, 255, 255, 160));
+        //}
+        //else
+        //{
+        //    ImGui::Dummy(ImVec2((float)restoreIconWidth, (float)restoreIconHeight));
+        //    drawList->AddImage(s_RestoreIcon, ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImVec2(0, 0), ImVec2(1, 1), IM_COL32(255, 255, 255, 32));
+        //}
+
+        //ImGui::SameLine(0, 0);
+        //ImGui::SetItemAllowOverlap();
+        //ImGui::Dummy(ImVec2(0, (float)restoreIconHeight));
+
+        ImGui::PopID();
+    }
+    ImGui::Unindent();
+
+    static int changeCount = 0;
+
+    ImGui::GetWindowDrawList()->AddRectFilled(
+        ImGui::GetCursorScreenPos(),
+        ImGui::GetCursorScreenPos() + ImVec2(paneWidth, ImGui::GetTextLineHeight()),
+        ImColor(ImGui::GetStyle().Colors[ImGuiCol_HeaderActive]), ImGui::GetTextLineHeight() * 0.25f);
+    ImGui::Spacing(); ImGui::SameLine();
+    ImGui::TextUnformatted("Selection");
+
+    //ImGui::BeginHorizontal("Selection Stats", ImVec2(paneWidth, 0));
+    ImGui::Text("Changed %d time%s", changeCount, changeCount > 1 ? "s" : "");
+    // TODO: MYCODE
+    //if (ImGui::Button("Select root"))
+    //    SelectRootNode();
+    //ImGui::SameLine();
+    if (ImGui::Button("Generate sdf"))
+        ClickGenerateSdf();
+    int objcount = 100;
+    if (ImGui::Button("Genereate test objects"))
+        PerfTestGenerateSdf(objcount);
+    //ImGui::Spring();
+    if (ImGui::Button("Deselect All"))
+        ed::ClearSelection();
+    //ImGui::EndHorizontal();
+    ImGui::Indent();
+    for (int i = 0; i < nodeCount; ++i) ImGui::Text("Node (%p)", selectedNodes[i].AsPointer());
+    for (int i = 0; i < linkCount; ++i) ImGui::Text("Link (%p)", selectedLinks[i].AsPointer());
+    ImGui::Unindent();
+
+    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Z)))
+        for (auto& link : s_Links)
+            ed::Flow(link.ID);
+
+    if (ed::HasSelectionChanged())
+        ++changeCount;
+
+    ImGui::EndChild();
+}
+
+static bool Create_CsgNode_Box(Box<CsgNode>& node)
+{
+    bool changed = false;
+
+    ed::PinId  node_TransformPinId = node.InputPins[0].ID;
+    ImGui::PushItemWidth(150);
+    //if (g_FirstFrame)
+    //    ed::SetNodePosition(node_Id, node_pos);
+    ed::BeginNode(node.id);
+    // TODO: Add/Write/Impl node.name
+    ImGui::Text("Box");
     ImGui::SameLine();
-    ed::BeginPin(node_OutputPinId, ed::PinKind::Output);
-    ImGui::Text("  >");
-    ed::EndPin();
 
     const char* format = "%.1f";
-
-    float pos[3] = {0.0,0.0,0.0};
-    ImGui::InputFloat3("Pos", pos, format);
-    
-    switch (type) {
-        case (PrimitiveType::Box):
-            float sides[3];
-            ImGui::InputFloat3("Sides", sides, format);
-            break;
-        case (PrimitiveType::CylinderY):
-            break;
-        case (PrimitiveType::Sphere):
-            float rad = 0.0;
-            ImGui::PushItemWidth(50);
-            ImGui::InputFloat("Radius", &rad, 0.0F, 0.0F, format);
-            ImGui::PopItemWidth();
-            break;
-    }
+    ImGui::PushItemWidth(120);
+    ImGui::PushID(node.id.AsPointer());
+    float transl_xyz[3] = { node.x, node.y, node.z };
+    changed = changed || ImGui::InputFloat3("XYZ", transl_xyz, format);
+    node.x = transl_xyz[0]; node.y = transl_xyz[1]; node.z = transl_xyz[2];
+    changed = changed || ImGui::InputInt("Material", &node.material);
+    ImGui::PopID();
+    ImGui::PopItemWidth();
 
     ed::BeginPin(node_TransformPinId, ed::PinKind::Input);
-    ImGui::Text("> Transforms");
+    ImGui::Text(">>");
+    ed::EndPin();
+    ed::EndNode();
+    ImGui::PopItemWidth();
+
+    return changed;
+}
+
+static bool Create_CsgNode_Sphere(Sphere<CsgNode> &node)
+{
+    bool changed = false;
+
+    ed::PinId  node_TransformPinId = node.InputPins[0].ID;
+    ImGui::PushItemWidth(150);
+    //if (g_FirstFrame)
+    //    ed::SetNodePosition(node_Id, node_pos);
+    ed::BeginNode(node.id);
+    // TODO: Add/Write/Impl node.name
+    ImGui::Text("Sphere");
+    // kell?
+    ImGui::SameLine();
+
+    const char* format = "%.1f";
+    ImGui::PushItemWidth(70);
+    ImGui::PushID(node.id.AsPointer());
+    changed = changed || ImGui::InputFloat("Radius", &node.r, 0.0F, 0.0F, format);
+    changed = changed || ImGui::InputInt("Material", &node.material);
+    ImGui::PopID();
+    ImGui::PopItemWidth();
+
+
+    ed::BeginPin(node_TransformPinId, ed::PinKind::Input);
+    ImGui::Text(">>");
+    ed::EndPin();
+    ed::EndNode();
+    ImGui::PopItemWidth();
+
+    return changed;
+}
+
+static bool Create_CsgNode_Cylinder(Cylinder<CsgNode>& node)
+{
+    bool changed = false;
+
+    ed::PinId  node_TransformPinId = node.InputPins[0].ID;
+    ImGui::PushItemWidth(150);
+    //if (g_FirstFrame)
+    //    ed::SetNodePosition(node_Id, node_pos);
+    ed::BeginNode(node.id);
+    // TODO: Add/Write/Impl node.name
+    ImGui::Text("Cylinder");
+    ImGui::SameLine();
+
+    const char* format = "%.1f";
+    ImGui::PushItemWidth(120);
+    ImGui::PushID(node.id.AsPointer());
+
+    //Dir1d dropdown selector (TODO:fix)
+    //background set dir1D (TODO:better)
+    //checkbox infinty
+    //background set y
+    int dir_ind = 0;
+    switch (node.dir)
+    {
+    case (Dir1D::X):
+        dir_ind = 0;
+        break;
+    case (Dir1D::Y):
+        dir_ind = 1;
+        break;
+    case (Dir1D::Z):
+        dir_ind = 2;
+        break;
+    }
+    changed = changed || ImGui::RadioButton("X", &dir_ind, 0); ImGui::SameLine();
+    changed = changed || ImGui::RadioButton("Y", &dir_ind, 1); ImGui::SameLine();
+    changed = changed || ImGui::RadioButton("Z", &dir_ind, 2);
+    switch (dir_ind)
+    {
+    case (0):
+        node.dir = Dir1D::X;
+        break;
+    case (1):
+        node.dir = Dir1D::Y;
+        break;
+    case (2):
+        node.dir = Dir1D::Z;
+        break;
+    default:
+        node.dir = Dir1D::X;
+        break;
+    }
+    changed = changed || ImGui::InputFloat("Diameter", &node.x, 0.0F, 0.0F, format);
+
+    // TODO: Maybe save/load this too like rotation data, then y could stay = inf when height not yet entered
+    bool is_infinite = (node.y == std::numeric_limits<float>::infinity());
+    changed = changed || ImGui::Checkbox("Infinite", &is_infinite);
+    if (!is_infinite)
+    {
+        if (node.y == std::numeric_limits<float>::infinity())
+            node.y = 0;
+        ImGui::SameLine();
+        changed = changed || ImGui::InputFloat("Height", &node.y, 0.0F, 0.0F, format);
+    }
+    else
+    {
+        node.y = std::numeric_limits<float>::infinity();
+    }
+    changed = changed || ImGui::InputInt("Material", &node.material);
+
+    ImGui::PopID();
+    ImGui::PopItemWidth();
+
+    ed::BeginPin(node_TransformPinId, ed::PinKind::Input);
+    ImGui::Text(">>");
+    ed::EndPin();
+    ed::EndNode();
+    ImGui::PopItemWidth();
+
+    return changed;
+}
+
+static bool Create_CsgNode_PlaneXZ(PlaneXZ<CsgNode>& node)
+{
+    bool changed = false;
+
+    ed::PinId  node_TransformPinId = node.InputPins[0].ID;
+    ImGui::PushItemWidth(150);
+    ed::BeginNode(node.id);
+    ImGui::Text("PlaneXZ");
+    ImGui::SameLine();
+
+    ImGui::PushItemWidth(70);
+    ImGui::PushID(node.id.AsPointer());
+    changed = changed || ImGui::InputInt("Material", &node.material);
+    ImGui::PopID();
+    ImGui::PopItemWidth();
+
+    ed::BeginPin(node_TransformPinId, ed::PinKind::Input);
+    ImGui::Text(">>");
+    ed::EndPin();
+    ed::EndNode();
+    ImGui::PopItemWidth();
+
+    return changed;
+}
+
+static bool Create_CsgNode_Move(Move<CsgNode>& node)
+{
+    bool changed = false;
+
+    ImGui::PushItemWidth(150);
+
+    ed::NodeId node_Id = node.id;
+    ed::PinId  node_OutputPinId = node.OutputPins[0].ID;
+    ed::PinId  node_TransformPinId = node.InputPins[0].ID;
+
+    ed::BeginNode(node_Id);
+    ImGui::Text("Translation");
+
+    ImGui::SameLine();
+    // TODO: How is this different from my personal pinkind logic?
+    ed::BeginPin(node_OutputPinId, ed::PinKind::Output);
+    ImGui::Text(">>");
+    ed::EndPin();
+
+    const char* format = "%.1f";
+    
+    // TODO: kell itmewidth?
+    //ImGui::PushItemWidth(50);
+    ImGui::PushID(node.id.AsPointer());
+    float transl_xyz[3] = { node.v.x, node.v.y, node.v.z };
+    changed = changed || ImGui::InputFloat3("XYZ", transl_xyz, format);
+    //node.v = glm::make_vec3(data);
+    node.v.x = transl_xyz[0]; node.v.y = transl_xyz[1]; node.v.z = transl_xyz[2];
+    ImGui::PopID();
+    //ImGui::PopItemWidth();
+
+    ed::BeginPin(node_TransformPinId, ed::PinKind::Input);
+    ImGui::Text(">>");
     ed::EndPin();
 
     ed::EndNode();
-
     ImGui::PopItemWidth();
+
+    return changed;
 }
 
-void Create_Transform_Node(int& uniqueId, TransformType type, ImVec2 node_pos)
+static bool Create_CsgNode_Rotate(Rotate<CsgNode>& node)
 {
+    bool changed = false;
+
     ImGui::PushItemWidth(150);
 
-    ed::NodeId node_Id = uniqueId++;
-    ed::PinId  node_OutputPinId = uniqueId++;
-    ed::PinId  node_TransformPinId = uniqueId++;
+    ed::NodeId node_Id = node.id;
+    ed::PinId  node_OutputPinId = node.OutputPins[0].ID;
+    ed::PinId  node_TransformPinId = node.InputPins[0].ID;
 
-    if (g_FirstFrame)
-        ed::SetNodePosition(node_Id, node_pos);
     ed::BeginNode(node_Id);
-    std::string type_s;
-    switch (type) {
-        case (TransformType::Rotation):
-            type_s = "Rotation";
-            break;
-        case (TransformType::Scale):
-            type_s = "Scale";
-            break;
-        case (TransformType::Translation):
-            type_s = "Translation";
-            break;
-    }
-    ImGui::Text((type_s + std::to_string(uniqueId)).c_str());
+    ImGui::Text("Rotation");
 
     ImGui::SameLine();
+    // TODO: How is this different from my personal pinkind logic?
     ed::BeginPin(node_OutputPinId, ed::PinKind::Output);
-    ImGui::Text("  >");
+    ImGui::Text(">>");
+    ed::EndPin();
+
+    const char* format = "%.3f";
+
+    // TODO: kell itmewidth?
+    //ImGui::PushItemWidth(50);
+    ImGui::PushID(node.id.AsPointer());
+
+    float row1[3] = { node.m[0].x, node.m[1].x, node.m[2].x, };
+    float row2[3] = { node.m[0].y, node.m[1].y, node.m[2].y, };
+    float row3[3] = { node.m[0].z, node.m[1].z, node.m[2].z, };
+
+    //static int rtype_ind = 0;
+    //changed = changed || ImGui::Combo("##c", &rtype_ind, "Around X\0Around Y\0Around Z\0By Mat3x3\0\0");
+    //changed = changed || ImGui::InputInt("(0-3)Rotation type", &rtype_ind);
+
+    // global static vector, struct: nodeid, angle, rotdir enum
+    // TODO: load rtype_ind from globalvector
+    int rtype_ind = node._rotation_type;
+    changed = changed || ImGui::RadioButton("X", &rtype_ind, 0); ImGui::SameLine();
+    changed = changed || ImGui::RadioButton("Y", &rtype_ind, 1); ImGui::SameLine();
+    changed = changed || ImGui::RadioButton("Z", &rtype_ind, 2); ImGui::SameLine();
+    ImGui::RadioButton("3x3", &rtype_ind, 3);
+    node._rotation_type = static_cast<Rotate<CsgNode>::rotation_type>(rtype_ind);
+    // TODO: save rtype_ind to global vector
+
+    // TODO: load angle from globalvector
+    if (rtype_ind == 0 || rtype_ind == 1 || rtype_ind == 2)
+    {
+        changed = changed || ImGui::InputInt("Angle", &node.angle_degree);
+        // TODO: save angle to global vector
+    }
+    if (rtype_ind == 3 /*TODO:Remove if no debuging*/ || true)
+    {
+        //ImGui::PushID(&row1);
+        changed = changed || ImGui::InputFloat3("##1", row1, format);
+        //ImGui::PopID();
+        changed = changed || ImGui::InputFloat3("##2", row2, format);
+        changed = changed || ImGui::InputFloat3("##3", row3, format);
+    }
+    if (changed)
+    {
+        switch (rtype_ind)
+        {
+        case (0):
+            node.m = rotateXdeg(node.angle_degree);
+            break;
+        case (1):
+            node.m = rotateYdeg(node.angle_degree);
+            break;
+        case (2):
+            node.m = rotateZdeg(node.angle_degree);
+            break;
+        case (3):
+            // glm uses column-wise assignment
+            node.m = glm::mat3(row1[0], row2[0], row3[0], row1[1], row2[1], row3[1], row1[2], row2[2], row3[2]);
+            // Incorrect row-wise assignment
+            //node.m = mat3(row1[0], row1[1], row1[2],
+            //    row2[0], row2[1], row2[2],
+            //    row3[0], row3[1], row3[2]);
+            break;
+        default:
+            node.m = glm::mat3(row1[0], row2[0], row3[0], row1[1], row2[1], row3[1], row1[2], row2[2], row3[2]);
+            break;
+        }
+    }
+    ImGui::PopID();
+    //ImGui::PopItemWidth();
+
+    ed::BeginPin(node_TransformPinId, ed::PinKind::Input);
+    ImGui::Text(">>");
+    ed::EndPin();
+
+    ed::EndNode();
+    ImGui::PopItemWidth();
+
+    return changed;
+}
+
+static bool Create_CsgNode_Offset(Offset<CsgNode>& node)
+{
+    bool changed = false;
+
+    ImGui::PushItemWidth(150);
+
+    ed::NodeId node_Id = node.id;
+    ed::PinId  node_OutputPinId = node.OutputPins[0].ID;
+    ed::PinId  node_TransformPinId = node.InputPins[0].ID;
+
+    ed::BeginNode(node_Id);
+    ImGui::Text("Offset");
+
+    ImGui::SameLine();
+    // TODO: How is this different from my personal pinkind logic?
+    ed::BeginPin(node_OutputPinId, ed::PinKind::Output);
+    ImGui::Text(">>");
     ed::EndPin();
 
     const char* format = "%.1f";
 
-    switch (type) {
-        case (TransformType::Rotation):
-            float rot_xyz[3];
-            ImGui::InputFloat3("Around XYZ", rot_xyz, format);
-            break;
-        case (TransformType::Scale):
-            float scale;
-            ImGui::InputFloat("Scale", &scale, 0.0f, 0.0f, format);
-            break;
-        case (TransformType::Translation):
-            float transl_xyz[3];
-            ImGui::InputFloat3("XYZ", transl_xyz, format);
-            break;
+    // TODO: kell itmewidth?
+    //ImGui::PushItemWidth(50);
+    ImGui::PushID(node.id.AsPointer());
+    changed = changed || ImGui::InputFloat("Offset", &node.r, 0.0F, 0.0F, format);
+    ImGui::PopID();
+    //ImGui::PopItemWidth();
+
+    ed::BeginPin(node_TransformPinId, ed::PinKind::Input);
+    ImGui::Text(">>");
+    ed::EndPin();
+
+    ed::EndNode();
+    ImGui::PopItemWidth();
+
+    return changed;
+}
+
+static bool Create_CsgNode_Invert(Invert<CsgNode>& node)
+{
+    ImGui::PushItemWidth(150);
+
+    ed::NodeId node_Id = node.id;
+    ed::PinId  node_OutputPinId = node.OutputPins[0].ID;
+    ed::PinId  node_TransformPinId = node.InputPins[0].ID;
+
+    ed::BeginNode(node_Id);
+    ImGui::Text("Invert");
+
+    ImGui::SameLine();
+    ed::BeginPin(node_OutputPinId, ed::PinKind::Output);
+    ImGui::Text(">>");
+    ed::EndPin();
+
+    ed::BeginPin(node_TransformPinId, ed::PinKind::Input);
+    ImGui::Text(">>");
+    ed::EndPin();
+
+    ed::EndNode();
+    ImGui::PopItemWidth();
+
+    return false;
+}
+
+static bool Create_CsgNode_Intersect(Intersect<CsgNode>& node)
+{
+    ed::BeginNode(node.id);
+    ImGui::Text("Intersect");
+
+    ed::BeginPin(node.InputPins[0].ID, ed::PinKind::Input);
+    ImGui::Text(">");
+    ed::EndPin();
+
+    //ImGui::SameLine();
+    for (auto& outputpin : node.OutputPins)
+    {
+        ed::BeginPin(outputpin.ID, ed::PinKind::Output);
+        ImGui::Text("   >>");
+        ed::EndPin();
     }
 
     ed::EndNode();
-
-    ImGui::PopItemWidth();
+    return false;
 }
 
-bool clicked_create = false;
-
-
-ed::NodeId fake_id = 1;
-
-const float g_offset = 0.25f;
-Expr<CsgNode>* toyCube(int mat) { return offset(g_offset, move({ 0.f, 1.f, 0.f }, box(0.9f, 0.9f, 0.9f, CsgNode{ fake_id, mat }))); }
-
-Expr<CsgNode>* toyBrickYthin(int mat) { return offset(g_offset, move({ 0.f, 3.f, 0.f }, box(0.4f, 2.9f, 0.9f, CsgNode{ fake_id, mat }))); }
-
-Expr<CsgNode>* toyBrickXthin(int mat) { return offset(g_offset, move({ 0.f, 0.5f, 0.f }, box(2.9f, 0.4f, 0.9f, CsgNode{ fake_id, mat }))); }
-
-Expr<CsgNode>* toyBrickYthick(int mat) { return offset(g_offset, move({ 0.f, 3.f, 0.f }, box(0.9f, 2.9f, 0.9f, CsgNode{ fake_id, mat }))); }
-
-Expr<CsgNode>* toyBrickXthick(int mat) { return offset(g_offset, move({ 0.f, 1.f, 0.f }, box(2.9f, 0.9f, 0.9f, CsgNode{ fake_id, mat }))); }
-//Expr<CsgNode>* toyBrickXthick(int mat) { return move({ 0.f, 1.f, 0.f }, box(2.9f, 0.9f, 0.9f, MyFields{ mat })); }
-
-Expr<CsgNode>* toyCylinder(int mat) { return offset(g_offset, move({ 0.f, 3.f, 0.f }, cylinder(Dir1D::Y, 0.9f, 2.9f, CsgNode{ fake_id, mat }))); }
-
-Expr<CsgNode>* toyCylinderSmall(int mat) { return offset(g_offset, move({ 0.f, 1.f, 0.f }, cylinder(Dir1D::Y, 0.9f, 0.9f, CsgNode{ fake_id, mat }))); }
-
-Expr<CsgNode>* toyArch(int mat) { return offset(g_offset, subtract<CsgNode>(toyBrickXthick(mat), move({ 0.f, -1.4f, 0.f }, cylinder(Dir1D::Z, 2.6f, CsgNode{ fake_id, mat })))); }
-
-Expr<CsgNode>* toyRoof(int mat) {
-    return offset(g_offset,
-        intersect<CsgNode>(toyBrickXthick(mat),
-            move({ 0.f, -1.5f, 0.f }, cylinder(Dir1D::Z, 3.3f, 0.9f, CsgNode{ fake_id, mat }))));
-}
-
-mat3 fitToyY(vec2 a, vec2 b) {
-    vec2 v = normalize(b - a);
-    return mat3(v.x, 0, -v.y, 0, 1, 0, v.y, 0, v.x);
-}
-
-Expr<CsgNode>* toys_exp2() {
-    vec3 p1(0, 0, 0), p2(4, 0, 0);
-    mat3 M12 = fitToyY(vec2(p1.x, p1.z), vec2(p1.x, p1.z));
-    vec3 p3 = 4.0f * normalize(vec3(-1, 0, 2));
-    mat3 M13 = fitToyY(vec2(p1.x, p1.z), vec2(p1.x, p1.z));
-    mat3 M1 = rotateY(0.5);
-    mat3 M2 = rotateY((float)-3.14159265 * 0.5f);
-    mat3 M3 = rotateY(0.4f);
-    mat3 M4 = rotateZ(0.42f);
-    mat3 M5 = rotateY(0.123f);
-    mat3 M1t = transpose(M1);
-
-    Expr<CsgNode>* testsphere = sphere(1, CsgNode{ 4 });
-    Expr<CsgNode>* testmove = move(vec3(1.20001, 1.00001, 3.20001), testsphere);
-
-    testsphere = toyCube(1);
-
-    return
-        union_op<CsgNode>(
-            planeXZ(CsgNode{ 3 }),
-            move(p1 + vec3(-0.4, 0, 0.4), rotate(M1t, toyCube(1))),
-            move(p2 + vec3(-0.1, 0, 1.4), rotate(M2, toyBrickXthick(0))),
-            move(p1 + vec3(0, 4, 0), rotate(M5, toyCube(2))),
-            move(p3, toyCylinder(0)),
-            //move(0.5f * (p1 + p2) + vec3(0, 2, 0), rotate(M12, toyArch(1))),
-            move(0.5f * (p1 + p2) + vec3(0, 2, 0), toyArch(1)),
-            move(0.5f * (p1 + p3) + vec3(0, 6.5, 0), rotate(M13, toyRoof(2))),
-            move(vec3(4, 4, 0), toyCylinderSmall(1)),
-            move(vec3(8.5, 0, 1.8), rotate(M5, toyBrickYthick(0))),
-            move(vec3(6.5, 6.25, 1), rotate(M3, toyBrickXthin(2))),
-            move(vec3(6.625, 1.193, 4.036), rotate(M4, toyBrickXthin(0))),
-            move(vec3(9, 8.5, 2.7), sphere(1, CsgNode{ 4 })),
-            //move(vec3(1.2, 1, 3.2), sphere(1, CsgNode{ 4 })),
-            testmove,
-            move(vec3(1, 0, 6), rotate(M13, toyCube(1))));
-}
-//vec3 lightpos = vec3(5, 1, 6.5;
-//vec3 lightpos = vec3(4,4.3,4.6);
-//vec3 lightpos = vec3(1,3,6);
-//vec3 lightpos = vec3(1.2,1,3.2);
-//vec3 lightpos = vec3(9,8.5,2.7);
-
-
-
-Expr<CsgNode> SelectRootNode()
+static bool Create_CsgNode_Union(Union<CsgNode>& node)
 {
-    return *toys_exp2();
-}
+#if 0
+    //const float rounding = 5.0f;
+    //const float padding = 12.0f;
 
-void GenerateSdf(Expr<CsgNode> &root)
-{
-    // TODO: change to .glsl
-    std::ofstream kernel("sdf_editortest.cpp");
-    kernel << sdf(root) << "\n" << material2(root);
-}
+    //const auto pinBackground = ed::GetStyle().Colors[ed::StyleColor_NodeBg];
 
-Expr<CsgNode> root;
+    //ed::PushStyleColor(ed::StyleColor_NodeBg, ImColor(128, 128, 128, 200));
+    //ed::PushStyleColor(ed::StyleColor_NodeBorder, ImColor(32, 32, 32, 200));
+    //ed::PushStyleColor(ed::StyleColor_PinRect, ImColor(60, 180, 255, 150));
+    //ed::PushStyleColor(ed::StyleColor_PinRectBorder, ImColor(60, 180, 255, 150));
 
-#include <iostream>
+    //ed::PushStyleVar(ed::StyleVar_NodePadding, ImVec4(0, 0, 0, 0));
+    //ed::PushStyleVar(ed::StyleVar_NodeRounding, rounding);
+    //ed::PushStyleVar(ed::StyleVar_SourceDirection, ImVec2(0.0f, 1.0f));
+    //ed::PushStyleVar(ed::StyleVar_TargetDirection, ImVec2(0.0f, -1.0f));
+    //ed::PushStyleVar(ed::StyleVar_LinkStrength, 0.0f);
+    //ed::PushStyleVar(ed::StyleVar_PinBorderWidth, 1.0f);
+    //ed::PushStyleVar(ed::StyleVar_PinRadius, 5.0f);
+    //ed::BeginNode(node.ID);
 
-void Application_Frame(float ms)
-{
-    //ImGui::ShowDemoWindow();
-   
-    //auto& io = ImGui::GetIO();
-    ed::SetCurrentEditor(g_Context);
+    //ImGui::BeginVertical(node.ID.AsPointer());
+    //ImGui::BeginHorizontal("inputs");
+    //ImGui::Spring(0, padding * 2);
 
-    // Start interaction with editor.
-    ed::Begin("My Editor", ImVec2(0.0, 0.0f));
+    //ImRect inputsRect;
+    //int inputAlpha = 200;
+    //if (!node.Inputs.empty())
+    //{
+    //    auto& pin = node.Inputs[0];
+    //    ImGui::Dummy(ImVec2(0, padding));
+    //    ImGui::Spring(1, 0);
+    //    inputsRect = ImGui_GetItemRect();
 
-    std::vector<Expr<CsgNode>*> nodes;
-    // std:: unordered_map (hashmap)
+    //    ed::PushStyleVar(ed::StyleVar_PinArrowSize, 10.0f);
+    //    ed::PushStyleVar(ed::StyleVar_PinArrowWidth, 10.0f);
+    //    ed::PushStyleVar(ed::StyleVar_PinCorners, 12);
+    //    ed::BeginPin(pin.ID, ed::PinKind::Input);
+    //    ed::PinPivotRect(inputsRect.GetTL(), inputsRect.GetBR());
+    //    ed::PinRect(inputsRect.GetTL(), inputsRect.GetBR());
+    //    ed::EndPin();
+    //    ed::PopStyleVar(3);
 
-    int uniqueId = 1;
+    //    if (newLinkPin && !CanCreateLink(newLinkPin, &pin) && &pin != newLinkPin)
+    //        inputAlpha = (int)(255 * ImGui::GetStyle().Alpha * (48.0f / 255.0f));
+    //}
+    //else
+    //    ImGui::Dummy(ImVec2(0, padding));
 
-    float paneWidth = 200;
-    //ImGui::BeginChild("Selection", ImVec2(paneWidth, 100));
-   // paneWidth = ImGui::GetContentRegionAvailWidth();
-    //ImGui::BeginHorizontal("Style Editor", ImVec2(paneWidth, 0));
-    if (ImGui::Button("Select root"))
-        root = SelectRootNode();
-    ImGui::SameLine();
-    if (ImGui::Button("Generate sdf"))
-        GenerateSdf(root);
+    //ImGui::Spring(0, padding * 2);
     //ImGui::EndHorizontal();
-    //ImGui::EndChild();
 
-    //Create_Operation_Node(uniqueId, "Union", ImVec2(310, 10));
-    //Create_Operation_Node(uniqueId, "Intersect", ImVec2(310, 110));
+    //ImGui::BeginHorizontal("content_frame");
+    //ImGui::Spring(1, padding);
 
-    //Create_Transform_Node(uniqueId, TransformType::Translation, ImVec2(10, 360));
-    //Create_Transform_Node(uniqueId, TransformType::Rotation, ImVec2(210, 360));
-    //Create_Transform_Node(uniqueId, TransformType::Scale, ImVec2(460, 360));
+    //ImGui::BeginVertical("content", ImVec2(0.0f, 0.0f));
+    //ImGui::Dummy(ImVec2(160, 0));
+    //ImGui::Spring(1);
+    //ImGui::TextUnformatted(node.Name.c_str());
+    //ImGui::Spring(1);
+    //ImGui::EndVertical();
+    //auto contentRect = ImGui_GetItemRect();
 
-    //Create_Primitive_Node(uniqueId, PrimitiveType::Sphere, ImVec2(10, 10));
-    //Create_Primitive_Node(uniqueId, PrimitiveType::Box, ImVec2(10, 110));
-    Create_Primitive_Node(uniqueId, PrimitiveType::Box, ImVec2(10, 210));
+    //ImGui::Spring(1, padding);
+    //ImGui::EndHorizontal();
 
+    //ImGui::BeginHorizontal("outputs");
+    //ImGui::Spring(0, padding * 2);
 
-    // Submit Links
-    for (auto& linkInfo : g_Links)
-        ed::Link(linkInfo.Id, linkInfo.InputId, linkInfo.OutputId);
+    //ImRect outputsRect;
+    //int outputAlpha = 200;
+    //if (!node.Outputs.empty())
+    //{
+    //    auto& pin = node.Outputs[0];
+    //    ImGui::Dummy(ImVec2(0, padding));
+    //    ImGui::Spring(1, 0);
+    //    outputsRect = ImGui_GetItemRect();
 
-    // Handle creation action, returns true if editor want to create new object (node or link)
-    if (ed::BeginCreate())
+    //    ed::PushStyleVar(ed::StyleVar_PinCorners, 3);
+    //    ed::BeginPin(pin.ID, ed::PinKind::Output);
+    //    ed::PinPivotRect(outputsRect.GetTL(), outputsRect.GetBR());
+    //    ed::PinRect(outputsRect.GetTL(), outputsRect.GetBR());
+    //    ed::EndPin();
+    //    ed::PopStyleVar();
+
+    //    if (newLinkPin && !CanCreateLink(newLinkPin, &pin) && &pin != newLinkPin)
+    //        outputAlpha = (int)(255 * ImGui::GetStyle().Alpha * (48.0f / 255.0f));
+    //}
+    //else
+    //    ImGui::Dummy(ImVec2(0, padding));
+
+    //ImGui::Spring(0, padding * 2);
+    //ImGui::EndHorizontal();
+
+    //ImGui::EndVertical();
+
+    //ed::EndNode();
+    //ed::PopStyleVar(7);
+    //ed::PopStyleColor(4);
+
+    //auto drawList = ed::GetNodeBackgroundDrawList(node.ID);
+
+    ////const auto fringeScale = ImGui::GetStyle().AntiAliasFringeScale;
+    ////const auto unitSize    = 1.0f / fringeScale;
+
+    ////const auto ImDrawList_AddRect = [](ImDrawList* drawList, const ImVec2& a, const ImVec2& b, ImU32 col, float rounding, int rounding_corners, float thickness)
+    ////{
+    ////    if ((col >> 24) == 0)
+    ////        return;
+    ////    drawList->PathRect(a, b, rounding, rounding_corners);
+    ////    drawList->PathStroke(col, true, thickness);
+    ////};
+
+    //drawList->AddRectFilled(inputsRect.GetTL() + ImVec2(0, 1), inputsRect.GetBR(),
+    //    IM_COL32((int)(255 * pinBackground.x), (int)(255 * pinBackground.y), (int)(255 * pinBackground.z), inputAlpha), 4.0f, 12);
+    ////ImGui::PushStyleVar(ImGuiStyleVar_AntiAliasFringeScale, 1.0f);
+    //drawList->AddRect(inputsRect.GetTL() + ImVec2(0, 1), inputsRect.GetBR(),
+    //    IM_COL32((int)(255 * pinBackground.x), (int)(255 * pinBackground.y), (int)(255 * pinBackground.z), inputAlpha), 4.0f, 12);
+    ////ImGui::PopStyleVar();
+    //drawList->AddRectFilled(outputsRect.GetTL(), outputsRect.GetBR() - ImVec2(0, 1),
+    //    IM_COL32((int)(255 * pinBackground.x), (int)(255 * pinBackground.y), (int)(255 * pinBackground.z), outputAlpha), 4.0f, 3);
+    ////ImGui::PushStyleVar(ImGuiStyleVar_AntiAliasFringeScale, 1.0f);
+    //drawList->AddRect(outputsRect.GetTL(), outputsRect.GetBR() - ImVec2(0, 1),
+    //    IM_COL32((int)(255 * pinBackground.x), (int)(255 * pinBackground.y), (int)(255 * pinBackground.z), outputAlpha), 4.0f, 3);
+    ////ImGui::PopStyleVar();
+    //drawList->AddRectFilled(contentRect.GetTL(), contentRect.GetBR(), IM_COL32(24, 64, 128, 200), 0.0f);
+    ////ImGui::PushStyleVar(ImGuiStyleVar_AntiAliasFringeScale, 1.0f);
+    //drawList->AddRect(
+    //    contentRect.GetTL(),
+    //    contentRect.GetBR(),
+    //    IM_COL32(48, 128, 255, 100), 0.0f);
+    ////ImGui::PopStyleVar();
+#endif
+    ed::BeginNode(node.id);
+    ImGui::Text("Union");
+
+    ed::BeginPin(node.InputPins[0].ID, ed::PinKind::Input);
+    ImGui::Text(">");
+    ed::EndPin();
+
+    //ImGui::SameLine();
+    for (auto& outputpin : node.OutputPins)
     {
-        ed::PinId inputPinId, outputPinId;
-        if (ed::QueryNewLink(&inputPinId, &outputPinId))
+        ed::BeginPin(outputpin.ID, ed::PinKind::Output);
+        ImGui::Text(">>");
+        ed::EndPin();
+    }
+
+    ed::EndNode();
+    return false;
+}
+
+template<typename Fields>
+struct RenderUiVisitor
+{
+    bool operator()(Box<Fields>& expr)
+    {
+        return Create_CsgNode_Box(expr);
+    }
+    bool operator()(Sphere<Fields>& expr)
+    {
+        return Create_CsgNode_Sphere(expr);
+    }
+    bool operator()(Cylinder<Fields>& expr)
+    {
+        return Create_CsgNode_Cylinder(expr);
+    }
+    bool operator()(PlaneXZ<Fields>& expr)
+    {
+        return Create_CsgNode_PlaneXZ(expr);
+    }
+    // --------------------------------------------------------
+    // --------------------------------------------------------
+    bool operator()(Move<Fields>& expr)
+    {
+        bool changed = Create_CsgNode_Move(expr);        
+        if (expr.a != nullptr)
+            changed = changed || visit(*this, *expr.a);
+        return changed;
+    }
+    bool operator()(Rotate<Fields>& expr)
+    {
+        bool changed = Create_CsgNode_Rotate(expr);
+        if (expr.a != nullptr)
+            changed = changed || visit(*this, *expr.a);
+        return changed;
+    }
+    bool operator()(Offset<Fields>& expr)
+    {
+        bool changed = Create_CsgNode_Offset(expr);
+        if (expr.a != nullptr)
+            changed = changed || visit(*this, *expr.a);
+        return changed;
+    }
+    bool operator()(Invert<Fields>& expr)
+    {
+        bool changed = Create_CsgNode_Invert(expr);
+        if (expr.a != nullptr)
+            changed = changed || visit(*this, *expr.a);
+        return changed;
+    }
+    // --------------------------------------------------------
+    // --------------------------------------------------------
+    bool operator()(Intersect<Fields>& expr)
+    {
+        bool changed = Create_CsgNode_Intersect(expr);
+        for (auto& leaf : expr.a)
+            changed = changed || visit(*this, *leaf);
+        return changed;
+    }
+    bool operator()(Union<Fields>& expr)
+    {
+        bool changed = Create_CsgNode_Union(expr);
+        for (auto& leaf : expr.a)
+            changed = changed || visit(*this, *leaf);
+        return changed;
+    }
+};
+
+template<typename Fields>
+struct LinkNodesVisitor
+{
+    Expr<CsgNode>* child;
+
+    void operator()(Box<Fields>& expr)      { }
+    void operator()(Sphere<Fields>& expr)   { }
+    void operator()(Cylinder<Fields>& expr) { }
+    void operator()(PlaneXZ<Fields>& expr)  { }
+
+    void operator()(Move<Fields>& expr)     { expr.a = child; }
+    void operator()(Rotate<Fields>& expr)   { expr.a = child; }
+    void operator()(Offset<Fields>& expr)   { expr.a = child; }
+    void operator()(Invert<Fields>& expr)   { expr.a = child; }
+
+    void operator()(Intersect<Fields>& expr) { expr.a.emplace_back(child); }
+    void operator()(Union<Fields>& expr) { expr.a.emplace_back(child); }
+};
+
+template<typename Fields>
+struct DeleteLinkVisitor
+{
+    Expr<CsgNode>* child;
+
+    // TODO raise exception/warning if StartNode is of these types
+    void operator()(Box<Fields>& expr) { }
+    void operator()(Sphere<Fields>& expr) { }
+    void operator()(Cylinder<Fields>& expr) { }
+    void operator()(PlaneXZ<Fields>& expr) { }
+
+    void operator()(Move<Fields>& expr) { expr.a = nullptr; }
+    void operator()(Rotate<Fields>& expr) { expr.a = nullptr; }
+    void operator()(Offset<Fields>& expr) { expr.a = nullptr; }
+    void operator()(Invert<Fields>& expr) { expr.a = nullptr; }
+
+    void operator()(Intersect<Fields>& expr)
+    {
+        // TODO: Does this change the ordering inside the vector?
+        // It does remove every occurence
+        expr.a.erase(std::remove(expr.a.begin(), expr.a.end(), child), expr.a.end());
+    }
+    void operator()(Union<Fields>& expr)
+    {
+        expr.a.erase(std::remove(expr.a.begin(), expr.a.end(), child), expr.a.end());
+    }
+};
+
+bool Application_Frame()
+{
+    UpdateTouch();
+
+    auto& io = ImGui::GetIO();
+
+    ImGui::Text("FPS: %.2f (%.2gms)", io.Framerate, io.Framerate ? 1000.0f / io.Framerate : 0.0f);
+    ImGui::Text("Roots size: %d", s_roots.size());
+
+    ed::SetCurrentEditor(m_Editor);
+    //auto& style = ImGui::GetStyle();
+
+# if 0
+    {
+        for (auto x = -io.DisplaySize.y; x < io.DisplaySize.x; x += 10.0f)
         {
-            // QueryNewLink returns true if editor want to create new link between pins.
-            //
-            // Link can be created only for two valid pins, it is up to you to
-            // validate if connection make sense. Editor is happy to make any.
-            //
-            // Link always goes from input to output. User may choose to drag
-            // link from output pin or input pin. This determine which pin ids
-            // are valid and which are not:
-            //   * input valid, output invalid - user started to drag new ling from input pin
-            //   * input invalid, output valid - user started to drag new ling from output pin
-            //   * input valid, output valid   - user dragged link over other pin, can be validated
-
-            if (inputPinId && outputPinId) // both are valid, let's accept link
-            {
-                // ed::AcceptNewItem() return true when user release mouse button.
-                if (ed::AcceptNewItem())
-                {                                     
-                    // Since we accepted new link, lets add one to our list of links.
-                    g_Links.push_back({ ed::LinkId(g_NextLinkId++), inputPinId, outputPinId });
-
-                    // Draw new link.
-                    ed::Link(g_Links.back().Id, g_Links.back().InputId, g_Links.back().OutputId);
-                }
-                // You may choose to reject connection between these nodes
-                // by calling ed::RejectNewItem(). This will allow editor to give
-                // visual feedback by changing link thickness and color.
-            }
+            ImGui::GetWindowDrawList()->AddLine(ImVec2(x, 0), ImVec2(x + io.DisplaySize.y, io.DisplaySize.y),
+                IM_COL32(255, 255, 0, 255));
         }
     }
-    ed::EndCreate(); // Wraps up object creation action handling.
+# endif
 
-    // Handle deletion action
-    if (ed::BeginDelete())
+    static ed::NodeId contextNodeId = 0;
+    static ed::LinkId contextLinkId = 0;
+    static ed::PinId  contextPinId = 0;
+    static bool createNewNode = false;
+    static Pin* newNodeLinkPin = nullptr;
+    static CsgPin* newLinkPin = nullptr;
+
+    static float leftPaneWidth = 400.0f;
+    static float rightPaneWidth = 800.0f;
+    Splitter(true, 4.0f, &leftPaneWidth, &rightPaneWidth, 50.0f, 50.0f);
+
+    // Set true by GenerateSdf() button in ShowLeftPane if pressed and successfully generated
+    generate_clicked = false;
+    graph_changed = false;
+
+    ShowLeftPane(leftPaneWidth - 4.0f);
+    
+    ImGui::SameLine(0.0f, 12.0f);
+
+    ed::Begin("Node editor");
     {
-        // There may be many links marked for deletion, let's loop over them.
-        ed::LinkId deletedLinkId;
-        while (ed::QueryDeletedLink(&deletedLinkId))
+        auto cursorTopLeft = ImGui::GetCursorScreenPos();
+        
+        // Display existing nodes
+        for (auto& root : s_roots)
+            graph_changed = graph_changed || visit(RenderUiVisitor<CsgNode>{}, *root);
+
+        // Display existing links
+        for (auto& link : s_Links)
+            ed::Link(link.ID, link.StartPin->ID, link.EndPin->ID, link.Color, 2.0f);
+
+        // Create/delete links
+        if (!createNewNode)
         {
-            // If you agree that link can be deleted, accept deletion.
-            if (ed::AcceptDeletedItem())
+            if (ed::BeginCreate(ImColor(255, 255, 255), 2.0f))
             {
-                // Then remove link from your data.
-                for (auto& link : g_Links)
+                auto showLabel = [](const char* label, ImColor color)
                 {
-                    if (link.Id == deletedLinkId)
+                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetTextLineHeight());
+                    auto size = ImGui::CalcTextSize(label);
+
+                    auto padding = ImGui::GetStyle().FramePadding;
+                    auto spacing = ImGui::GetStyle().ItemSpacing;
+
+                    ImGui::SetCursorPos(ImGui::GetCursorPos() + ImVec2(spacing.x, -spacing.y));
+
+                    auto rectMin = ImGui::GetCursorScreenPos() - padding;
+                    auto rectMax = ImGui::GetCursorScreenPos() + size + padding;
+
+                    auto drawList = ImGui::GetWindowDrawList();
+                    drawList->AddRectFilled(rectMin, rectMax, color, size.y * 0.15f);
+                    ImGui::TextUnformatted(label);
+                };
+
+                ed::PinId startPinId = 0, endPinId = 0;
+                if (ed::QueryNewLink(&startPinId, &endPinId))
+                {                    
+                    auto startPin = FindPinCsg(startPinId);
+                    auto endPin = FindPinCsg(endPinId);
+
+                    newLinkPin = startPin ? startPin : endPin;
+
+                    // Connecting line can be drawn both ways, store them correctly
+                    if (startPin->Kind == PinKind::Input)
                     {
-                        g_Links.erase(&link);
-                        break;
+                        std::swap(startPin, endPin);
+                        std::swap(startPinId, endPinId);
+                    }
+
+                    if (startPin && endPin)
+                    {
+
+                        if (endPin == startPin)
+                        {
+                            ed::RejectNewItem(ImColor(128, 255, 128), 2.0f);
+                        }
+                        else if (endPin->Kind == startPin->Kind)
+                        {
+                            showLabel("x Incompatible Pin Kind", ImColor(45, 32, 32, 180));
+                            ed::RejectNewItem(ImColor(255, 0, 0), 2.0f);
+                        }
+                        else if (endPin->Node == startPin->Node)
+                        {
+                            showLabel("x Cannot connect to self", ImColor(45, 32, 32, 180));
+                            ed::RejectNewItem(ImColor(255, 0, 0), 1.0f);
+                        }
+                        else if (endPin->Type != startPin->Type)
+                        {
+                            showLabel("x Incompatible Pin Type", ImColor(45, 32, 32, 180));
+                            ed::RejectNewItem(ImColor(255, 128, 128), 1.0f);
+                        }
+                        else
+                        {
+                            // Check if the two nodes are already directly connected
+                            // TODO: Is this too slow? Do only when accepted if it is with lots of links
+                            auto already_connected_link =
+                                std::find_if(s_Links.begin(), s_Links.end(),
+                                    [endPinId, startPin](auto& link) { return link.EndPin->ID == endPinId &&
+                                    link.StartPin->Node == startPin->Node; });
+                            if (already_connected_link != s_Links.end())
+                            {
+                                showLabel("x Already connected", ImColor(45, 32, 32, 180));
+                                ed::RejectNewItem(ImColor(255, 0, 0), 2.0f);
+                                //std::cout << "asd";
+                            }
+                            else
+                            {
+                                // Check if the connection would make a circle
+                                ed::NodeId startPin_NodeId = std::visit([](auto& n) {return n.id; }, *startPin->Node);
+                                auto parent_found_in_child =  std::visit(FindNodeVisitor<CsgNode>{ startPin_NodeId, endPin->Node }, *endPin->Node);
+                                if (parent_found_in_child)
+                                {
+                                    showLabel("x Cyclic connections are not supported", ImColor(45, 32, 32, 180));
+                                    ed::RejectNewItem(ImColor(255, 0, 0), 2.0f);
+                                    //std::cout << "asd";
+                                }
+                                else
+                                {
+                                    showLabel("+ Create Link", ImColor(32, 45, 32, 180));
+                                    if (ed::AcceptNewItem(ImColor(128, 255, 128), 4.0f))
+                                    {
+                                        // If there is already an object connected to the startpin/outputpin, disconnect it
+                                        // TODO: refactor into function along with deletelink place one
+                                        auto existing_child_link =
+                                            std::find_if(s_Links.begin(), s_Links.end(),
+                                                [startPinId](auto& link) { return link.StartPin->ID == startPinId; });
+                                        // If another connection found
+                                        if (existing_child_link != s_Links.end())
+                                        {
+                                            
+                                            std::visit(DeleteLinkVisitor<CsgNode>{ existing_child_link->EndPin->Node },
+                                                * existing_child_link->StartPin->Node);
+
+                                            // Check if the EndNode can still be found as child in other nodes
+                                            ed::NodeId existing_child_id = std::visit([](auto& n) {return n.id; },
+                                                *existing_child_link->EndPin->Node);
+                                            // Assume it is no longer linked, then try to find if it still is
+                                            bool no_longer_linked = true;
+                                            for (auto& root : s_roots)
+                                            {
+                                                // Try to find the EndNode in other nodes
+                                                if (std::visit(FindNodeVisitor<CsgNode>{existing_child_id, root}, * root))
+                                                {
+                                                    // If found, then it is still linked to other node(s)
+                                                    no_longer_linked = false;
+                                                    break;
+                                                }
+                                            }
+                                            // If the node is no longer linked to anything, add it back as root
+                                            if (no_longer_linked)
+                                                s_roots.emplace_back(existing_child_link->EndPin->Node);
+
+                                            s_Links.erase(existing_child_link);
+                                        }
+                                        // Create link visually
+                                        s_Links.emplace_back(CsgLink(GetNextId(), startPin, endPin));
+                                        s_Links.back().Color = GetIconColor(startPin->Type);
+                                        // Connect the node expressions
+                                        std::visit(LinkNodesVisitor<CsgNode>{ endPin->Node }, * startPin->Node);
+                                        // Remove the connected child from roots
+                                        s_roots.erase(std::remove(s_roots.begin(), s_roots.end(), endPin->Node), s_roots.end());
+                                        graph_changed = true;
+                                        //}
+                                    }
+                                }                                
+                            }
+                        }
+                    }
+                }
+
+                ed::PinId pinId = 0;
+                if (ed::QueryNewNode(&pinId))
+                {
+                    newLinkPin = FindPinCsg(pinId);
+                    if (newLinkPin)
+                        showLabel("+ Create Node", ImColor(32, 45, 32, 180));
+
+                    if (ed::AcceptNewItem())
+                    {
+                        createNewNode = true;
+                        newNodeLinkPin = FindPin(pinId);
+                        newLinkPin = nullptr;
+                        ed::Suspend();
+                        ImGui::OpenPopup("Create New Node");
+                        // TODO: Maybe wrong location, if so add global mousepos variable at start of appframe_ui
+                        newNodePosition = ImGui::GetMousePos();
+                        ed::Resume();
                     }
                 }
             }
-            // You may reject link deletion by calling:
-            // ed::RejectDeletedItem();
+            else
+                newLinkPin = nullptr;
+            ed::EndCreate();
+
+            if (ed::BeginDelete())
+            {
+                ed::LinkId linkId = 0;
+                while (ed::QueryDeletedLink(&linkId))
+                {
+                    if (ed::AcceptDeletedItem())
+                    {
+                        // Finds link
+                        auto iter_link = std::find_if(s_Links.begin(), s_Links.end(), [linkId](auto& link) { return link.ID == linkId; });
+                        if (iter_link != s_Links.end())
+                        {
+                            // Delete expression/tree linkage
+                            std::visit(DeleteLinkVisitor<CsgNode>{ iter_link->EndPin->Node }, *(iter_link->StartPin->Node));
+                            
+                            // Check if the EndNode can still be found as child in other nodes
+                            ed::NodeId end_id = std::visit([](auto& n) {return n.id; }, *iter_link->EndPin->Node);
+                            // Assume it is no longer linked, then try to find if it still is
+                            bool no_longer_linked = true;
+                            for (auto& root : s_roots)
+                            {
+                                // Try to find the EndNode in other nodes
+                                if (std::visit(FindNodeVisitor<CsgNode>{end_id, root}, * root))
+                                {
+                                    // If found, then it is still linked to other node(s)
+                                    no_longer_linked = false;
+                                    break;
+                                }
+                            }
+                            // If the node is no longer linked to anything, add it back as root
+                            if (no_longer_linked)
+                                s_roots.emplace_back(iter_link->EndPin->Node);
+                            
+                            // Visually delete link in UI
+                            s_Links.erase(iter_link);
+                            graph_changed = true;
+                        }
+                    }
+                }
+
+                ed::NodeId nodeId = 0;
+                while (ed::QueryDeletedNode(&nodeId))
+                {
+                    if (ed::AcceptDeletedItem())
+                    {
+                        Expr<CsgNode>* node;
+                        for (auto& root : s_roots)
+                        {
+                            node = std::visit(FindNodeVisitor<CsgNode>{nodeId, root}, *root);
+
+                            if (node)
+                            {
+                                // All links of the node are deleted automatically, so this code is not needed
+                                // 
+                                //// finds only one output link
+                                //auto output_link =
+                                //    std::find_if(s_Links.begin(), s_Links.end(),
+                                //        //[nodeId](auto& link) { return link.StartPin->Node.id == nodeId; });
+                                //        [node](auto& link) { return link.StartPin->Node == node; });
+
+                                //if (output_link != s_Links.end())
+                                //{
+                                //    std::visit(DeleteLinkVisitor<CsgNode>{ output_link->EndPin->Node },
+                                //        *(output_link->StartPin->Node));
+                                //    s_roots.emplace_back(output_link->EndPin->Node);
+                                //    s_Links.erase(output_link);
+                                //}
+
+                                // Deleteing all its links has added it as root
+                                s_roots.erase(std::remove(s_roots.begin(), s_roots.end(), node), s_roots.end());
+                                delete node;
+                                graph_changed = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            ed::EndDelete();
         }
+        ImGui::SetCursorScreenPos(cursorTopLeft);
     }
-    ed::EndDelete(); // Wrap up deletion action   
 
-
+# if 1
+    auto openPopupPosition = ImGui::GetMousePos();
     // Minimized ugly hack, screensize = 4 might be different for other resolution, just set it higher
     bool is_collapsed = (ed::GetScreenSize().y <= 40);
-    
+
+    // Context menu events (right-cliks)
     if (!is_collapsed)
     {
-        // Handle Rightclick
         ed::Suspend();
-        if (ed::ShowBackgroundContextMenu())
-            ImGui::OpenPopup("Create New Node");
-        //ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 8));
-        if (ImGui::BeginPopup("Create New Node"))
+        if (ed::ShowNodeContextMenu(&contextNodeId))
+            ImGui::OpenPopup("Node Context Menu");
+        else if (ed::ShowPinContextMenu(&contextPinId))
+            ImGui::OpenPopup("Pin Context Menu");
+        else if (ed::ShowLinkContextMenu(&contextLinkId))
+            ImGui::OpenPopup("Link Context Menu");
+        else if (ed::ShowBackgroundContextMenu())
         {
-            if (ImGui::MenuItem("Create"))
-                clicked_create = !clicked_create;
-            ImGui::EndPopup();
+            ImGui::OpenPopup("Create New Node");
+            newNodePosition = openPopupPosition;
+            newNodeLinkPin = nullptr;
         }
-        //ImGui::PopStyleVar();
         ed::Resume();
     }
+    
+    // Handle context menu events (right-clicks)
+    if (!is_collapsed)
+    {
+        ed::Suspend();
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 8));
+        if (ImGui::BeginPopup("Node Context Menu"))
+        {
+            auto node = FindNode(contextNodeId);
 
-    if (clicked_create)
-        Create_Operation_Node(uniqueId, "Union", ImVec2(310, 110));
+            ImGui::TextUnformatted("Node Context Menu");
+            ImGui::Separator();
+            if (node)
+            {
+                ImGui::Text("ID: %p", node->ID.AsPointer());
+                ImGui::Text("Type: %s", node->Type == NodeType::Blueprint ? "Blueprint" : (node->Type == NodeType::Tree ? "Tree" : "Comment"));
+                ImGui::Text("Inputs: %d", (int)node->Inputs.size());
+                ImGui::Text("Outputs: %d", (int)node->Outputs.size());
+            }
+            else
+                ImGui::Text("Unknown node: %p", contextNodeId.AsPointer());
+            ImGui::Separator();
+            if (ImGui::MenuItem("Delete"))
+                ed::DeleteNode(contextNodeId);
+            ImGui::EndPopup();
+        }
 
-    // End of interaction with editor.
+        if (ImGui::BeginPopup("Pin Context Menu"))
+        {
+            auto pin = FindPin(contextPinId);
+
+            ImGui::TextUnformatted("Pin Context Menu");
+            ImGui::Separator();
+            if (pin)
+            {
+                ImGui::Text("ID: %p", pin->ID.AsPointer());
+                if (pin->Node)
+                    ImGui::Text("Node: %p", pin->Node->ID.AsPointer());
+                else
+                    ImGui::Text("Node: %s", "<none>");
+            }
+            else
+                ImGui::Text("Unknown pin: %p", contextPinId.AsPointer());
+
+            ImGui::EndPopup();
+        }
+
+        if (ImGui::BeginPopup("Link Context Menu"))
+        {
+            auto link = FindLink(contextLinkId);
+
+            ImGui::TextUnformatted("Link Context Menu");
+            ImGui::Separator();
+            if (link)
+            {
+                ImGui::Text("ID: %p", link->ID.AsPointer());
+                ImGui::Text("From: %p", link->StartPin->ID.AsPointer());
+                ImGui::Text("To: %p", link->EndPin->ID.AsPointer());
+            }
+            else
+                ImGui::Text("Unknown link: %p", contextLinkId.AsPointer());
+            ImGui::Separator();
+            if (ImGui::MenuItem("Delete"))
+                ed::DeleteLink(contextLinkId);
+            ImGui::EndPopup();
+        }
+
+        if (ImGui::BeginPopup("Create New Node"))
+        {
+            //ImGui::SetCursorScreenPos(ImGui::GetMousePosOnOpeningCurrentPopup());
+
+            //auto drawList = ImGui::GetWindowDrawList();
+            //drawList->AddCircleFilled(ImGui::GetMousePosOnOpeningCurrentPopup(), 10.0f, 0xFFFF00FF);
+
+            Expr<CsgNode>* node = nullptr;            
+
+            // Primitives
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(ImColor(0, 255, 0, 255)));
+            ImGui::Text("Primitives:");
+            ImGui::PopStyleColor();
+            ImGui::Separator();
+            if (ImGui::MenuItem("Sphere"))
+            {
+                node = sphere(0.f, CsgNode{ GetNextId() });
+                s_roots.emplace_back(node);
+                std::get<Sphere<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
+                graph_changed = true;
+            }
+            if (ImGui::MenuItem("Box"))
+            {
+                node = box(0.f,0.f,0.f, CsgNode{ GetNextId() });
+                s_roots.emplace_back(node);
+                std::get<Box<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
+                graph_changed = true;
+            }
+            if (ImGui::MenuItem("Cylinder"))
+            {
+                node = cylinder(Dir1D::Y, 0.f, 0.f, CsgNode{ GetNextId() });
+                s_roots.emplace_back(node);
+                std::get<Cylinder<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
+                graph_changed = true;
+            }
+            if (ImGui::MenuItem("Plane"))
+            {
+                node = planeXZ(CsgNode{ GetNextId() });
+                s_roots.emplace_back(node);
+                std::get<PlaneXZ<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
+                graph_changed = true;
+            }
+            ImGui::Separator();
+            // Transformations
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(ImColor(0, 255, 0, 255)));
+            ImGui::Text("Transforms:");
+            ImGui::PopStyleColor();
+            ImGui::Separator();
+            if (ImGui::MenuItem("Translation"))
+            {
+                Expr<CsgNode>* empty = nullptr;
+                node = move({ 0.f, 0.f, 0.f }, empty, CsgNode{ GetNextId() });
+                s_roots.emplace_back(node);
+                std::get<Move<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
+                std::get<Move<CsgNode>>(*(s_roots.back())).OutputPins.emplace_back(GetNextId(), "<<");
+                graph_changed = true;
+            }
+            if (ImGui::MenuItem("Rotation"))
+            {
+                Expr<CsgNode>* empty = nullptr;
+                node = rotate(glm::mat3(1.0), empty, CsgNode{ GetNextId() });
+                s_roots.emplace_back(node);
+                std::get<Rotate<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
+                std::get<Rotate<CsgNode>>(*(s_roots.back())).OutputPins.emplace_back(GetNextId(), "<<");
+                graph_changed = true;
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Offset"))
+            {
+                Expr<CsgNode>* empty = nullptr;
+                node = offset(0.f, empty, CsgNode{ GetNextId() });
+                s_roots.emplace_back(node);
+                std::get<Offset<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
+                std::get<Offset<CsgNode>>(*(s_roots.back())).OutputPins.emplace_back(GetNextId(), "<<");
+                graph_changed = true;
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Invert"))
+            {
+                Expr<CsgNode>* empty = nullptr;
+                node = invert(empty, CsgNode{ GetNextId() });
+                s_roots.emplace_back(node);
+                std::get<Invert<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
+                std::get<Invert<CsgNode>>(*(s_roots.back())).OutputPins.emplace_back(GetNextId(), "<<");
+                graph_changed = true;
+            }
+            ImGui::Separator();
+            // Operations
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(ImColor(0, 255, 0, 255)));
+            ImGui::Text("Operations:");
+            ImGui::PopStyleColor();
+            ImGui::Separator();
+            if (ImGui::MenuItem("Union"))
+            {
+                node = union_op( CsgNode{ GetNextId() });
+                s_roots.emplace_back(node);
+                std::get<Union<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
+                auto outputs = &std::get<Union<CsgNode>>(*(s_roots.back())).OutputPins;
+                outputs->emplace_back(GetNextId(), "<<");
+                outputs->emplace_back(GetNextId(), "<<");
+                outputs->emplace_back(GetNextId(), "<<");
+                outputs->emplace_back(GetNextId(), "<<");
+                graph_changed = true;
+            }
+            if (ImGui::MenuItem("Intersect"))
+            {
+                node = intersect(CsgNode{ GetNextId() });
+                s_roots.emplace_back(node);
+                std::get<Intersect<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
+                auto outputs = &std::get<Intersect<CsgNode>>(*(s_roots.back())).OutputPins;
+                outputs->emplace_back(GetNextId(), "<<");
+                outputs->emplace_back(GetNextId(), "<<");
+                outputs->emplace_back(GetNextId(), "<<");
+                outputs->emplace_back(GetNextId(), "<<");
+                graph_changed = true;
+            }
+
+            if (node)
+            {
+                BuildCsgNode(node);
+                // TODO: do i need to build all? not really, maybe import/export changes this
+                //BuildNodes();
+
+                createNewNode = false;
+                ed::NodeId new_node_id = std::visit([](auto& n) {return n.id; }, *node);
+                ed::SetNodePosition(new_node_id, newNodePosition);
+
+                // TODO: Create new node and link it on rightclick
+                //if (auto startPin = newNodeLinkPin)
+                //{
+                //    auto& pins = startPin->Kind == PinKind::Input ? node->Outputs : node->Inputs;
+
+                //    for (auto& pin : pins)
+                //    {
+                //        if (CanCreateLink(startPin, &pin))
+                //        {
+                //            auto endPin = &pin;
+                //            if (startPin->Kind == PinKind::Input)
+                //                std::swap(startPin, endPin);
+
+                //            s_Links.emplace_back(Link(GetNextId(), startPin->ID, endPin->ID));
+                //            s_Links.back().Color = GetIconColor(startPin->Type);
+
+                //            break;
+                //        }
+                //    }
+                //}
+            }
+
+            ImGui::EndPopup();
+        }
+        else
+            createNewNode = false;
+        ImGui::PopStyleVar();
+        ed::Resume();
+    }
+# endif
+
+    /*
+        cubic_bezier_t c;
+        c.p0 = pointf(100, 600);
+        c.p1 = pointf(300, 1200);
+        c.p2 = pointf(500, 100);
+        c.p3 = pointf(900, 600);
+
+        auto drawList = ImGui::GetWindowDrawList();
+        auto offset_radius = 15.0f;
+        auto acceptPoint = [drawList, offset_radius](const bezier_subdivide_result_t& r)
+        {
+            drawList->AddCircle(to_imvec(r.point), 4.0f, IM_COL32(255, 0, 255, 255));
+
+            auto nt = r.tangent.normalized();
+            nt = pointf(-nt.y, nt.x);
+
+            drawList->AddLine(to_imvec(r.point), to_imvec(r.point + nt * offset_radius), IM_COL32(255, 0, 0, 255), 1.0f);
+        };
+
+        drawList->AddBezierCurve(to_imvec(c.p0), to_imvec(c.p1), to_imvec(c.p2), to_imvec(c.p3), IM_COL32(255, 255, 255, 255), 1.0f);
+        cubic_bezier_subdivide(acceptPoint, c);
+    */
+
+    // Generate new .glsl fragment shader if necessary
+    if (graph_changed && render_all)
+        AutoGenerateSdf();
+
     ed::End();
-    if (g_FirstFrame)
-        ed::NavigateToContent(0.0f);
-    ed::SetCurrentEditor(nullptr);
-    g_FirstFrame = false;
+    //ImGui::ShowTestWindow();
+    //ImGui::ShowMetricsWindow();
+    ImGui::ShowDemoWindow();
+    return (graph_changed && (render_all || generate_clicked));
 }
 
-//void Application_Frame2()
-//{
-//    auto& io = ImGui::GetIO();
-//
-//    ImGui::Text("FPS: %.2f (%.2gms)", io.Framerate, io.Framerate ? 1000.0f / io.Framerate : 0.0f);
-//
-//    ImGui::Separator();
-//
-//    ed::SetCurrentEditor(g_Context);
-//
-//    // Start interaction with editor.
-//    ed::Begin("My Editor", ImVec2(0.0, 0.0f));
-//
-//    int uniqueId = 1;
-//
-//    //
-//    // 1) Commit known data to editor
-//    //
-//
-//    // Submit Node A
-//    ed::NodeId nodeA_Id = uniqueId++;
-//    ed::PinId  nodeA_InputPinId = uniqueId++;
-//    ed::PinId  nodeA_OutputPinId = uniqueId++;
-//
-//    if (g_FirstFrame)
-//        ed::SetNodePosition(nodeA_Id, ImVec2(10, 10));
-//    ed::BeginNode(nodeA_Id);
-//    ImGui::Text("Node A");
-//    ed::BeginPin(nodeA_InputPinId, ed::PinKind::Input);
-//    ImGui::Text("-> In");
-//    ed::EndPin();
-//    ImGui::SameLine();
-//    ed::BeginPin(nodeA_OutputPinId, ed::PinKind::Output);
-//    ImGui::Text("Out ->");
-//    ed::EndPin();
-//    ed::EndNode();
-//
-//    // Submit Node B
-//    ed::NodeId nodeB_Id = uniqueId++;
-//    ed::PinId  nodeB_InputPinId1 = uniqueId++;
-//    ed::PinId  nodeB_InputPinId2 = uniqueId++;
-//    ed::PinId  nodeB_OutputPinId = uniqueId++;
-//
-//    if (g_FirstFrame)
-//        ed::SetNodePosition(nodeB_Id, ImVec2(210, 60));
-//    ed::BeginNode(nodeB_Id);
-//    ImGui::Text("Node B");
-//    ImGuiEx_BeginColumn();
-//    ed::BeginPin(nodeB_InputPinId1, ed::PinKind::Input);
-//    ImGui::Text("-> In1");
-//    ed::EndPin();
-//    ed::BeginPin(nodeB_InputPinId2, ed::PinKind::Input);
-//    ImGui::Text("-> In2");
-//    ed::EndPin();
-//    ImGuiEx_NextColumn();
-//    ed::BeginPin(nodeB_OutputPinId, ed::PinKind::Output);
-//    ImGui::Text("Out ->");
-//    ed::EndPin();
-//    ImGuiEx_EndColumn();
-//    ed::EndNode();
-//
-//    // Submit Links
-//    for (auto& linkInfo : g_Links)
-//        ed::Link(linkInfo.Id, linkInfo.InputId, linkInfo.OutputId);
-//
-//    //
-//    // 2) Handle interactions
-//    //
-//
-//    // Handle creation action, returns true if editor want to create new object (node or link)
-//    if (ed::BeginCreate())
-//    {
-//        ed::PinId inputPinId, outputPinId;
-//        if (ed::QueryNewLink(&inputPinId, &outputPinId))
-//        {
-//            // QueryNewLink returns true if editor want to create new link between pins.
-//            //
-//            // Link can be created only for two valid pins, it is up to you to
-//            // validate if connection make sense. Editor is happy to make any.
-//            //
-//            // Link always goes from input to output. User may choose to drag
-//            // link from output pin or input pin. This determine which pin ids
-//            // are valid and which are not:
-//            //   * input valid, output invalid - user started to drag new ling from input pin
-//            //   * input invalid, output valid - user started to drag new ling from output pin
-//            //   * input valid, output valid   - user dragged link over other pin, can be validated
-//
-//            if (inputPinId && outputPinId) // both are valid, let's accept link
-//            {
-//                // ed::AcceptNewItem() return true when user release mouse button.
-//                if (ed::AcceptNewItem())
-//                {
-//                    // Since we accepted new link, lets add one to our list of links.
-//                    g_Links.push_back({ ed::LinkId(g_NextLinkId++), inputPinId, outputPinId });
-//
-//                    // Draw new link.
-//                    ed::Link(g_Links.back().Id, g_Links.back().InputId, g_Links.back().OutputId);
-//                }
-//
-//                // You may choose to reject connection between these nodes
-//                // by calling ed::RejectNewItem(). This will allow editor to give
-//                // visual feedback by changing link thickness and color.
-//            }
-//        }
-//    }
-//    ed::EndCreate(); // Wraps up object creation action handling.
-//
-//
-//    // Handle deletion action
-//    if (ed::BeginDelete())
-//    {
-//        // There may be many links marked for deletion, let's loop over them.
-//        ed::LinkId deletedLinkId;
-//        while (ed::QueryDeletedLink(&deletedLinkId))
-//        {
-//            // If you agree that link can be deleted, accept deletion.
-//            if (ed::AcceptDeletedItem())
-//            {
-//                // Then remove link from your data.
-//                for (auto& link : g_Links)
-//                {
-//                    if (link.Id == deletedLinkId)
-//                    {
-//                        g_Links.erase(&link);
-//                        break;
-//                    }
-//                }
-//            }
-//
-//            // You may reject link deletion by calling:
-//            // ed::RejectDeletedItem();
-//        }
-//    }
-//    ed::EndDelete(); // Wrap up deletion action
-//
-//
-//
-//    // End of interaction with editor.
-//    ed::End();
-//
-//    if (g_FirstFrame)
-//        ed::NavigateToContent(0.0f);
-//
-//    ed::SetCurrentEditor(nullptr);
-//
-//    g_FirstFrame = false;
-//
-//    // ImGui::ShowMetricsWindow();
-//}
-//
+//------------------------------------------------------------------------------
+//} // namespace CsgTreeEditor end

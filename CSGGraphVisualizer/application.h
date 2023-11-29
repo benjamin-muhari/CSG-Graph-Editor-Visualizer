@@ -10,4 +10,4 @@ int         Application_GetTextureHeight(ImTextureID texture);
 const char* Application_GetName();
 void Application_Initialize();
 void Application_Finalize();
-void Application_Frame(float ms);
+bool Application_Frame();
