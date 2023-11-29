@@ -142,9 +142,7 @@
     <ClCompile Include="CodeGen\Models\toys.cpp" />
     <ClCompile Include="CodeGen\ObjectsUtil.cpp" />
     <ClCompile Include="CodeGen\util.cpp" />
-    <ClCompile Include="csg_node_DRAFT.cpp" />
     <ClCompile Include="csg_tree_editor.cpp" />
-    <ClCompile Include="delete_this.cpp" />
     <ClCompile Include="ImguiNodeEditor\crude_json.cpp" />
     <ClCompile Include="ImguiNodeEditor\imgui_canvas.cpp" />
     <ClCompile Include="ImguiNodeEditor\imgui_node_editor.cpp" />
@@ -155,7 +153,10 @@
     <None Include="ImguiNodeEditor\imgui_bezier_math.inl" />
     <None Include="ImguiNodeEditor\imgui_extra_math.inl" />
     <None Include="ImguiNodeEditor\imgui_node_editor_internal.inl" />
+    <None Include="Shaders\gen_raytrace.frag" />
     <None Include="Shaders\raytrace.frag" />
+    <None Include="Shaders\raytrace.frag.template.postfix" />
+    <None Include="Shaders\raytrace.frag.template.prefix" />
     <None Include="Shaders\raytrace.vert" />
   </ItemGroup>
   <ItemGroup>

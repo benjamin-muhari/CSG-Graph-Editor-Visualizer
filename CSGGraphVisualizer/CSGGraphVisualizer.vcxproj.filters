@@ -14,6 +14,9 @@
     <Filter Include="ImGuiNodeEditor">
       <UniqueIdentifier>{221ca7be-8b60-46a3-993f-dda38a187cd7}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Shaders">
+      <UniqueIdentifier>{9375f8db-c7b7-4cba-8f0b-677f6b3ccd6c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -65,13 +68,9 @@
     <ClCompile Include="ImguiNodeEditor\imgui_node_editor_api.cpp">
       <Filter>ImGuiNodeEditor</Filter>
     </ClCompile>
-    <ClCompile Include="csg_node_DRAFT.cpp" />
     <ClCompile Include="csg_tree_editor.cpp" />
-    <ClCompile Include="delete_this.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="Shaders\raytrace.frag" />
-    <None Include="Shaders\raytrace.vert" />
     <None Include="ImguiNodeEditor\imgui_bezier_math.inl">
       <Filter>ImGuiNodeEditor</Filter>
     </None>
@@ -80,6 +79,21 @@
     </None>
     <None Include="ImguiNodeEditor\imgui_node_editor_internal.inl">
       <Filter>ImGuiNodeEditor</Filter>
+    </None>
+    <None Include="Shaders\raytrace.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\raytrace.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\gen_raytrace.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\raytrace.frag.template.postfix">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\raytrace.frag.template.prefix">
+      <Filter>Shaders</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
