@@ -37,40 +37,83 @@ struct Material2{
     	return Var("Value", Value("(" + move_rotate() + ").y" + offset(), expr.material));
     }
     Carrier operator()(Offset<Fields> expr) {
+        if (!expr.a)
+            return Empty();
 		state.offset += expr.r;
 		return visit(*this, *expr.a);
     }
     Carrier operator()(Union<Fields> expr) {
+        if (expr.a.size() == 0)
+            return Empty();
 		float off = state.offset; state.offset = 0;
+        // This can still be empty, handle inside for loop
         auto result = visit(*this, *expr.a[0]);
         for (int i = 1; i < (int)expr.a.size(); ++i) {
             auto sub_expr = visit(*this, *expr.a[i]);
-        	result.code += sub_expr.code;
-        	result += "if(" + sub_expr.reg + ".d < " + result.reg + ".d)"
-        			+ result.reg +" = " + sub_expr.reg  + "; // union " + std::to_string(i);
+            // Ignore empty/meaningless members of union
+            if (sub_expr.code != "")
+            {
+                // If the union was so far empty
+                if (result.code == "")
+                {
+                    // Then its register was not set, set it
+                    result.reg = sub_expr.reg;
+                    // Also don't need min() operation on first element
+                    result.code += sub_expr.code;
+                }
+                else
+                {
+                    result.code += sub_expr.code;
+                    result += "if(" + sub_expr.reg + ".d < " + result.reg + ".d)"
+                        + result.reg + " = " + sub_expr.reg + "; // union " + std::to_string(i);
+                }
+            }
         }
 		if(off != 0) result += result.reg + ".d -= " + float1(off) + ';';
         return result;
     }
 	Carrier operator()(Intersect<Fields> expr) {
+        if (expr.a.size() == 0)
+            return Empty();
 		float off = state.offset; state.offset = 0;
+        // This can still be empty, handle inside for loop
         auto result = visit(*this, *expr.a[0]);
         for (int i = 1; i < (int)expr.a.size(); ++i) {
             auto sub_expr = visit(*this, *expr.a[i]);
-        	result.code += sub_expr.code;
-        	result += "if(" + sub_expr.reg + ".d > " + result.reg + ".d)"
-        			+ result.reg +" = " + sub_expr.reg  + "; // intersect " + std::to_string(i);
+            // Ignore empty/meaningless members of intersect
+            if (sub_expr.code != "")
+            {
+                // If the intersect was so far empty
+                if (result.code == "")
+                {
+                    // Then its register was not set, set it
+                    result.reg = sub_expr.reg;
+                    // Also don't need max() operation on first element
+                    result.code += sub_expr.code;
+                }
+                else
+                {
+                    result.code += sub_expr.code;
+                    result += "if(" + sub_expr.reg + ".d > " + result.reg + ".d)"
+                        + result.reg + " = " + sub_expr.reg + "; // intersect " + std::to_string(i);
+                }
+            }
         }
 		if(off != 0) result += result.reg + ".d -= " + float1(off) + ';';
         return result;
     }
     Carrier operator()(Invert<Fields> expr) {
+        if (!expr.a)
+            return Empty();
         auto result = visit(*this, *expr.a);
-    	result += result.reg + ".d *= -1.; //invert";
+        if (result.code != "")
+            result += result.reg + ".d *= -1.; //invert";
 		state.offset *=-1;
         return result;
     }
     Carrier operator()(Move<Fields> expr) {
+        if (!expr.a)
+            return Empty();
         auto prev_move = state.move;
         state.move += expr.v;
         auto result = visit(*this, *expr.a);
@@ -78,6 +121,8 @@ struct Material2{
         return result;
     }
     Carrier operator()(Rotate<Fields> expr) {
+        if (!expr.a)
+            return Empty();
         auto prev_rotate = state.rotate;
         state.rotate *= expr.m;
         auto result = visit(*this, *expr.a);
@@ -124,12 +169,21 @@ struct Material2{
     	carr.reg = Var(type_, value_, carr);
     	return carr;
     }
+
+    Carrier Empty()
+    {
+        Carrier carr;
+        return carr;
+    }
 };
 
 template<typename Fields>
 std::string material2(Expr<Fields> expr) {
     using namespace std::string_literals;
     auto result = visit(Material2<Fields>{}, expr);
+    if (result.code == "")
+        result = CodeCarrier{ "\tValue r0 = Value(1.0 / 0.0, 0);\n", "r0", "Value" };
+
     return "Material material(vec3 p) {\n"s
 		+ result.code + "\treturn colors[" + result.reg + ".mat" + "];\n}\n";
 }

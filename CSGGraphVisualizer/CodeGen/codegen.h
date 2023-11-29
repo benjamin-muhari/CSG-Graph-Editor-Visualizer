@@ -35,38 +35,81 @@ struct CodeGen {
         return Var("float","(" + move_rotate() + ").y" + offset());
     }
     Carrier operator()(Offset<Fields> expr) {
+        if (!expr.a)
+            return Empty();
 		state.offset += expr.r;
         return visit(*this, *expr.a);
     }
     Carrier operator()(Invert<Fields> expr) {
+        if (!expr.a)
+            return Empty();
         auto result = visit(*this, *expr.a);
-    	result += result.reg + " *= -1.; //invert";
+        if (result.code != "")
+    	    result += result.reg + " *= -1.; //invert";
 		state.offset *=-1;
         return result;
     }
     Carrier operator()(Intersect<Fields> expr) {
+        if (expr.a.size() == 0)
+            return Empty();
 		float off = state.offset; state.offset = 0;
+        // This can still be empty, handle inside for loop
         auto result = visit(*this, *expr.a[0]);
         for (int i = 1; i < (int)expr.a.size(); ++i) {
             auto sub_expr = visit(*this, *expr.a[i]);
-        	result.code += sub_expr.code;
-            result += result.reg + " = " + "max(" + result.reg + ',' + sub_expr.reg + "); //intersect " + std::to_string(i);
+            // Ignore empty/meaningless members of intersect
+            if (sub_expr.code != "")
+            {
+                // If the intersect was so far empty
+                if (result.code == "")
+                {
+                    // Then its register was not set, set it
+                    result.reg = sub_expr.reg;
+                    // Also don't need max() operation on first element
+                    result.code += sub_expr.code;
+                }
+                else
+                {
+                    result.code += sub_expr.code;
+                    result += result.reg + " = " + "max(" + result.reg + ',' + sub_expr.reg + "); //intersect " + std::to_string(i);
+                }
+            }
         }
 		if(off != 0) result += result.reg + " -= " + float1(off) + ';';
         return result;
     }
 	Carrier operator()(Union<Fields> expr) {
+        if (expr.a.size() == 0)
+            return Empty();
 		float off = state.offset; state.offset = 0;
+        // This can still be empty, handle inside for loop
         auto result = visit(*this, *expr.a[0]);
         for (int i = 1; i < (int)expr.a.size(); ++i) {
             auto sub_expr = visit(*this, *expr.a[i]);
-        	result.code += sub_expr.code;
-            result += result.reg + " = " + "min(" + result.reg + ',' + sub_expr.reg + "); //union " + std::to_string(i);
+            // Ignore empty/meaningless members of union
+            if (sub_expr.code != "")
+            {
+                // If the union was so far empty
+                if (result.code == "")
+                {
+                    // Then its register was not set, set it
+                    result.reg = sub_expr.reg;
+                    // Also don't need min() operation on first element
+                    result.code += sub_expr.code;
+                }
+                else
+                {
+                    result.code += sub_expr.code;
+                    result += result.reg + " = " + "min(" + result.reg + ',' + sub_expr.reg + "); //union " + std::to_string(i);
+                }
+            }
         }
 		if(off != 0) result += result.reg + " -= " + float1(off) + ';';
         return result;
     }
     Carrier operator()(Move<Fields> expr) {
+        if (!expr.a)
+            return Empty();
         auto prev_move = state.move;
         state.move += expr.v;
         auto result = visit(*this, *expr.a);
@@ -74,6 +117,8 @@ struct CodeGen {
         return result;
     }
     Carrier operator()(Rotate<Fields> expr) {
+        if (!expr.a)
+            return Empty();
         auto prev_rotate = state.rotate;
         state.rotate *= expr.m;
         auto result = visit(*this, *expr.a);
@@ -118,11 +163,39 @@ struct CodeGen {
     	Carrier carr = {"","",type_};
     	carr.reg = Var(type_, value_, carr);
     	return carr;
-    }	
+    }
+
+    Carrier Empty()
+    {
+        Carrier carr;
+
+        // Adds redundant line: rx = min(rx,rx) after warning, not ideal
+        //carr.code += "\t//Warning: Empty node\n";
+        //carr.reg = "r" + std::to_string(state.next_reg-1);
+        //return carr;
+        // 
+        // Comments entire line, bugs if the empty node is first
+        //carr.code += "\t//Warning: Empty node:";
+        //carr.reg = "empty node";
+        //carr.reg_type = "empty node";
+        //return carr;
+
+        // Moved this outside of the visitor into sdf()
+        //if (state.next_reg == 0)
+        //    return Carrier{ "\tfloat r0 = 1.0 / 0.0;\n", "r0", "float"};
+        // 
+        // Better handle the empty register values when they need to be handled, dont add confusing code
+        //return Carrier{"", "r" + std::to_string(state.next_reg), ""};
+
+        return carr;
+    }
 };
 
 template<typename Fields>
 std::string sdf(Expr<Fields> expr) {
     auto result = visit(CodeGen<Fields>{}, expr);
+    if (result.code == "")
+        result = CodeCarrier{ "\tfloat r0 = 1.0 / 0.0;\n", "r0", "float" };
+
     return "float sdf(vec3 p) {\n" + result.code + "\treturn " + result.reg + ";\n}\n";
 }
