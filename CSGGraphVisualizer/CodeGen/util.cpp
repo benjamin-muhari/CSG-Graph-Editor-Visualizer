@@ -1,5 +1,7 @@
+#define _USE_MATH_DEFINES
 #include "util.h"
 #include <sstream>
+#include <math.h>
 
 using namespace std;
 using namespace glm;
@@ -52,6 +54,10 @@ mat3 rotateZ(float angle)
     float s = sin(angle), c = cos(angle);
     return mat3(c, s, 0, -s, c, 0, 0, 0, 1);
 }
+
+mat3 rotateXdeg(int angle) { return rotateX((float)angle / 180 * M_PI); }
+mat3 rotateYdeg(int angle) { return rotateY((float)angle / 180 * M_PI); }
+mat3 rotateZdeg(int angle) { return rotateZ((float)angle / 180 * M_PI); }
 
 float length(float x, float y) {
     return (float)vec2(x, y).length();

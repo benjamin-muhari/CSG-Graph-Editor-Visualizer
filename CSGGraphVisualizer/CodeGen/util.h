@@ -14,6 +14,10 @@ glm::mat3 rotateX(float angle);
 glm::mat3 rotateY(float angle);
 glm::mat3 rotateZ(float angle);
 
+glm::mat3 rotateXdeg(int angle);
+glm::mat3 rotateYdeg(int angle);
+glm::mat3 rotateZdeg(int angle);
+
 float length(float x, float y);
 float length(float x, float y, float z);
 
