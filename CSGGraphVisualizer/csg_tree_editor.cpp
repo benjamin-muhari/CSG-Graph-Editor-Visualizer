@@ -2112,28 +2112,24 @@ bool Application_Frame()
                 node = sphere(0.f, CsgNode{ GetNextId() });
                 s_roots.emplace_back(node);
                 std::get<Sphere<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
-                graph_changed = true;
             }
             if (ImGui::MenuItem("Box"))
             {
                 node = box(0.f,0.f,0.f, CsgNode{ GetNextId() });
                 s_roots.emplace_back(node);
                 std::get<Box<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
-                graph_changed = true;
             }
             if (ImGui::MenuItem("Cylinder"))
             {
                 node = cylinder(Dir1D::Y, 0.f, 0.f, CsgNode{ GetNextId() });
                 s_roots.emplace_back(node);
                 std::get<Cylinder<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
-                graph_changed = true;
             }
             if (ImGui::MenuItem("Plane"))
             {
                 node = planeXZ(CsgNode{ GetNextId() });
                 s_roots.emplace_back(node);
                 std::get<PlaneXZ<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
-                graph_changed = true;
             }
             ImGui::Separator();
             // Transformations
@@ -2148,7 +2144,6 @@ bool Application_Frame()
                 s_roots.emplace_back(node);
                 std::get<Move<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
                 std::get<Move<CsgNode>>(*(s_roots.back())).OutputPins.emplace_back(GetNextId(), "<<");
-                graph_changed = true;
             }
             if (ImGui::MenuItem("Rotation"))
             {
@@ -2157,7 +2152,6 @@ bool Application_Frame()
                 s_roots.emplace_back(node);
                 std::get<Rotate<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
                 std::get<Rotate<CsgNode>>(*(s_roots.back())).OutputPins.emplace_back(GetNextId(), "<<");
-                graph_changed = true;
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Offset"))
@@ -2167,7 +2161,6 @@ bool Application_Frame()
                 s_roots.emplace_back(node);
                 std::get<Offset<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
                 std::get<Offset<CsgNode>>(*(s_roots.back())).OutputPins.emplace_back(GetNextId(), "<<");
-                graph_changed = true;
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Invert"))
@@ -2177,7 +2170,6 @@ bool Application_Frame()
                 s_roots.emplace_back(node);
                 std::get<Invert<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
                 std::get<Invert<CsgNode>>(*(s_roots.back())).OutputPins.emplace_back(GetNextId(), "<<");
-                graph_changed = true;
             }
             ImGui::Separator();
             // Operations
@@ -2195,7 +2187,6 @@ bool Application_Frame()
                 outputs->emplace_back(GetNextId(), "<<");
                 outputs->emplace_back(GetNextId(), "<<");
                 outputs->emplace_back(GetNextId(), "<<");
-                graph_changed = true;
             }
             if (ImGui::MenuItem("Intersect"))
             {
@@ -2207,16 +2198,17 @@ bool Application_Frame()
                 outputs->emplace_back(GetNextId(), "<<");
                 outputs->emplace_back(GetNextId(), "<<");
                 outputs->emplace_back(GetNextId(), "<<");
-                graph_changed = true;
             }
 
             if (node)
             {
+                graph_changed = true;
+                createNewNode = false;
+
                 BuildCsgNode(node);
                 // TODO: do i need to build all? not really, maybe import/export changes this
                 //BuildNodes();
 
-                createNewNode = false;
                 ed::NodeId new_node_id = std::visit([](auto& n) {return n.id; }, *node);
                 ed::SetNodePosition(new_node_id, newNodePosition);
 
@@ -2240,20 +2232,6 @@ bool Application_Frame()
                         ConnectCsgNodes(startPin, endPin);
                         graph_changed = true;
                     }
-                    //for (auto& pin : pins)
-                    //{
-                    //    if (CanCreateLink(startPin, &pin))
-                    //    {
-                    //        auto endPin = &pin;
-                    //        if (startPin->Kind == PinKind::Input)
-                    //            std::swap(startPin, endPin);
-
-                    //        s_Links.emplace_back(Link(GetNextId(), startPin->ID, endPin->ID));
-                    //        s_Links.back().Color = GetIconColor(startPin->Type);
-
-                    //        break;
-                    //    }
-                    //}
                 }
             }
 
