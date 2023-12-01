@@ -1701,6 +1701,51 @@ struct DeleteLinkVisitor
     }
 };
 
+static void ConnectCsgNodes(CsgPin* startPin, CsgPin* endPin)
+{
+    ed::PinId startPinId = startPin->ID;
+    // If there is already an object connected to the startpin/outputpin, disconnect it
+    // TODO: refactor into function along with deletelink place one
+    auto existing_child_link =
+        std::find_if(s_Links.begin(), s_Links.end(),
+            [startPinId](auto& link) { return link.StartPin->ID == startPinId; });
+    // If another connection found
+    if (existing_child_link != s_Links.end())
+    {
+
+        std::visit(DeleteLinkVisitor<CsgNode>{ existing_child_link->EndPin->Node },
+            * existing_child_link->StartPin->Node);
+
+        // Check if the EndNode can still be found as child in other nodes
+        ed::NodeId existing_child_id = std::visit([](auto& n) {return n.id; },
+            *existing_child_link->EndPin->Node);
+        // Assume it is no longer linked, then try to find if it still is
+        bool no_longer_linked = true;
+        for (auto& root : s_roots)
+        {
+            // Try to find the EndNode in other nodes
+            if (std::visit(FindNodeVisitor<CsgNode>{existing_child_id, root}, * root))
+            {
+                // If found, then it is still linked to other node(s)
+                no_longer_linked = false;
+                break;
+            }
+        }
+        // If the node is no longer linked to anything, add it back as root
+        if (no_longer_linked)
+            s_roots.emplace_back(existing_child_link->EndPin->Node);
+
+        s_Links.erase(existing_child_link);
+    }
+    // Create link visually
+    s_Links.emplace_back(CsgLink(GetNextId(), startPin, endPin));
+    s_Links.back().Color = GetIconColor(startPin->Type);
+    // Connect the node expressions
+    std::visit(LinkNodesVisitor<CsgNode>{ endPin->Node }, * startPin->Node);
+    // Remove the connected child from roots
+    s_roots.erase(std::remove(s_roots.begin(), s_roots.end(), endPin->Node), s_roots.end());
+}
+
 bool Application_Frame()
 {
     UpdateTouch();
@@ -1727,7 +1772,7 @@ bool Application_Frame()
     static ed::LinkId contextLinkId = 0;
     static ed::PinId  contextPinId = 0;
     static bool createNewNode = false;
-    static Pin* newNodeLinkPin = nullptr;
+    static CsgPin* newNodeLinkPin = nullptr;
     static CsgPin* newLinkPin = nullptr;
 
     static float leftPaneWidth = 400.0f;
@@ -1737,15 +1782,15 @@ bool Application_Frame()
     // Set true by GenerateSdf() button in ShowLeftPane if pressed and successfully generated
     generate_clicked = false;
     graph_changed = false;
+    // GetMousePos() value depends on context, always set this at the relevant location
+    ImVec2 openPopupPosition;
 
-    ShowLeftPane(leftPaneWidth - 4.0f);
-    
+    ShowLeftPane(leftPaneWidth - 4.0f);    
     ImGui::SameLine(0.0f, 12.0f);
 
     ed::Begin("Node editor");
     {
         auto cursorTopLeft = ImGui::GetCursorScreenPos();
-        
         // Display existing nodes
         for (auto& root : s_roots)
             graph_changed = graph_changed || visit(RenderUiVisitor<CsgNode>{}, *root);
@@ -1844,48 +1889,8 @@ bool Application_Frame()
                                     showLabel("+ Create Link", ImColor(32, 45, 32, 180));
                                     if (ed::AcceptNewItem(ImColor(128, 255, 128), 4.0f))
                                     {
-                                        // If there is already an object connected to the startpin/outputpin, disconnect it
-                                        // TODO: refactor into function along with deletelink place one
-                                        auto existing_child_link =
-                                            std::find_if(s_Links.begin(), s_Links.end(),
-                                                [startPinId](auto& link) { return link.StartPin->ID == startPinId; });
-                                        // If another connection found
-                                        if (existing_child_link != s_Links.end())
-                                        {
-                                            
-                                            std::visit(DeleteLinkVisitor<CsgNode>{ existing_child_link->EndPin->Node },
-                                                * existing_child_link->StartPin->Node);
-
-                                            // Check if the EndNode can still be found as child in other nodes
-                                            ed::NodeId existing_child_id = std::visit([](auto& n) {return n.id; },
-                                                *existing_child_link->EndPin->Node);
-                                            // Assume it is no longer linked, then try to find if it still is
-                                            bool no_longer_linked = true;
-                                            for (auto& root : s_roots)
-                                            {
-                                                // Try to find the EndNode in other nodes
-                                                if (std::visit(FindNodeVisitor<CsgNode>{existing_child_id, root}, * root))
-                                                {
-                                                    // If found, then it is still linked to other node(s)
-                                                    no_longer_linked = false;
-                                                    break;
-                                                }
-                                            }
-                                            // If the node is no longer linked to anything, add it back as root
-                                            if (no_longer_linked)
-                                                s_roots.emplace_back(existing_child_link->EndPin->Node);
-
-                                            s_Links.erase(existing_child_link);
-                                        }
-                                        // Create link visually
-                                        s_Links.emplace_back(CsgLink(GetNextId(), startPin, endPin));
-                                        s_Links.back().Color = GetIconColor(startPin->Type);
-                                        // Connect the node expressions
-                                        std::visit(LinkNodesVisitor<CsgNode>{ endPin->Node }, * startPin->Node);
-                                        // Remove the connected child from roots
-                                        s_roots.erase(std::remove(s_roots.begin(), s_roots.end(), endPin->Node), s_roots.end());
+                                        ConnectCsgNodes(startPin, endPin);
                                         graph_changed = true;
-                                        //}
                                     }
                                 }                                
                             }
@@ -1893,6 +1898,7 @@ bool Application_Frame()
                     }
                 }
 
+                openPopupPosition = ImGui::GetMousePos();
                 ed::PinId pinId = 0;
                 if (ed::QueryNewNode(&pinId))
                 {
@@ -1903,12 +1909,11 @@ bool Application_Frame()
                     if (ed::AcceptNewItem())
                     {
                         createNewNode = true;
-                        newNodeLinkPin = FindPin(pinId);
+                        newNodeLinkPin = FindPinCsg(pinId);
                         newLinkPin = nullptr;
                         ed::Suspend();
                         ImGui::OpenPopup("Create New Node");
-                        // TODO: Maybe wrong location, if so add global mousepos variable at start of appframe_ui
-                        newNodePosition = ImGui::GetMousePos();
+                        newNodePosition = openPopupPosition;
                         ed::Resume();
                     }
                 }
@@ -2000,10 +2005,9 @@ bool Application_Frame()
     }
 
 # if 1
-    auto openPopupPosition = ImGui::GetMousePos();
     // Minimized ugly hack, screensize = 4 might be different for other resolution, just set it higher
     bool is_collapsed = (ed::GetScreenSize().y <= 40);
-
+    openPopupPosition = ImGui::GetMousePos();
     // Context menu events (right-cliks)
     if (!is_collapsed)
     {
@@ -2216,26 +2220,41 @@ bool Application_Frame()
                 ed::NodeId new_node_id = std::visit([](auto& n) {return n.id; }, *node);
                 ed::SetNodePosition(new_node_id, newNodePosition);
 
-                // TODO: Create new node and link it on rightclick
-                //if (auto startPin = newNodeLinkPin)
-                //{
-                //    auto& pins = startPin->Kind == PinKind::Input ? node->Outputs : node->Inputs;
+                // If created by dragging link from a pin, newNodeLinkPin won't be null
+                if (auto startPin = newNodeLinkPin)
+                {
+                    std::vector<CsgPin>* pins;
+                    
+                    if (startPin->Kind == PinKind::Input)
+                        pins = std::visit([](auto& n) { return &n.OutputPins; }, *node);
+                    else
+                        pins = std::visit([](auto& n) { return &n.InputPins; }, *node);
 
-                //    for (auto& pin : pins)
-                //    {
-                //        if (CanCreateLink(startPin, &pin))
-                //        {
-                //            auto endPin = &pin;
-                //            if (startPin->Kind == PinKind::Input)
-                //                std::swap(startPin, endPin);
+                    if (!pins->empty())
+                    {
+                        // Connect to the first pin
+                        auto endPin = &(*pins)[0];
+                        if (startPin->Kind == PinKind::Input)
+                            std::swap(startPin, endPin);
 
-                //            s_Links.emplace_back(Link(GetNextId(), startPin->ID, endPin->ID));
-                //            s_Links.back().Color = GetIconColor(startPin->Type);
+                        ConnectCsgNodes(startPin, endPin);
+                        graph_changed = true;
+                    }
+                    //for (auto& pin : pins)
+                    //{
+                    //    if (CanCreateLink(startPin, &pin))
+                    //    {
+                    //        auto endPin = &pin;
+                    //        if (startPin->Kind == PinKind::Input)
+                    //            std::swap(startPin, endPin);
 
-                //            break;
-                //        }
-                //    }
-                //}
+                    //        s_Links.emplace_back(Link(GetNextId(), startPin->ID, endPin->ID));
+                    //        s_Links.back().Color = GetIconColor(startPin->Type);
+
+                    //        break;
+                    //    }
+                    //}
+                }
             }
 
             ImGui::EndPopup();
