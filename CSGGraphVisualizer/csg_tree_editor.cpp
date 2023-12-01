@@ -2095,43 +2095,44 @@ bool Application_Frame()
 
         if (ImGui::BeginPopup("Create New Node"))
         {
-            //ImGui::SetCursorScreenPos(ImGui::GetMousePosOnOpeningCurrentPopup());
+            Expr<CsgNode>* node = nullptr;
 
-            //auto drawList = ImGui::GetWindowDrawList();
-            //drawList->AddCircleFilled(ImGui::GetMousePosOnOpeningCurrentPopup(), 10.0f, 0xFFFF00FF);
-
-            Expr<CsgNode>* node = nullptr;            
-
-            // Primitives
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(ImColor(0, 255, 0, 255)));
-            ImGui::Text("Primitives:");
-            ImGui::PopStyleColor();
-            ImGui::Separator();
-            if (ImGui::MenuItem("Sphere"))
+            // Don't show primitives in menu if linking to another node's inputs
+            if (newNodeLinkPin && newNodeLinkPin->Kind == PinKind::Input)
+            { } // skip
+            else
             {
-                node = sphere(0.f, CsgNode{ GetNextId() });
-                s_roots.emplace_back(node);
-                std::get<Sphere<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
+                // Primitives
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(ImColor(0, 255, 0, 255)));
+                ImGui::Text("Primitives:");
+                ImGui::PopStyleColor();
+                ImGui::Separator();
+                if (ImGui::MenuItem("Sphere"))
+                {
+                    node = sphere(0.f, CsgNode{ GetNextId() });
+                    s_roots.emplace_back(node);
+                    std::get<Sphere<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
+                }
+                if (ImGui::MenuItem("Box"))
+                {
+                    node = box(0.f, 0.f, 0.f, CsgNode{ GetNextId() });
+                    s_roots.emplace_back(node);
+                    std::get<Box<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
+                }
+                if (ImGui::MenuItem("Cylinder"))
+                {
+                    node = cylinder(Dir1D::Y, 0.f, 0.f, CsgNode{ GetNextId() });
+                    s_roots.emplace_back(node);
+                    std::get<Cylinder<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
+                }
+                if (ImGui::MenuItem("Plane"))
+                {
+                    node = planeXZ(CsgNode{ GetNextId() });
+                    s_roots.emplace_back(node);
+                    std::get<PlaneXZ<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
+                }
+                ImGui::Separator();
             }
-            if (ImGui::MenuItem("Box"))
-            {
-                node = box(0.f,0.f,0.f, CsgNode{ GetNextId() });
-                s_roots.emplace_back(node);
-                std::get<Box<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
-            }
-            if (ImGui::MenuItem("Cylinder"))
-            {
-                node = cylinder(Dir1D::Y, 0.f, 0.f, CsgNode{ GetNextId() });
-                s_roots.emplace_back(node);
-                std::get<Cylinder<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
-            }
-            if (ImGui::MenuItem("Plane"))
-            {
-                node = planeXZ(CsgNode{ GetNextId() });
-                s_roots.emplace_back(node);
-                std::get<PlaneXZ<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
-            }
-            ImGui::Separator();
             // Transformations
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(ImColor(0, 255, 0, 255)));
             ImGui::Text("Transforms:");
@@ -2162,7 +2163,6 @@ bool Application_Frame()
                 std::get<Offset<CsgNode>>(*(s_roots.back())).InputPins.emplace_back(GetNextId(), "<<");
                 std::get<Offset<CsgNode>>(*(s_roots.back())).OutputPins.emplace_back(GetNextId(), "<<");
             }
-            ImGui::Separator();
             if (ImGui::MenuItem("Invert"))
             {
                 Expr<CsgNode>* empty = nullptr;
@@ -2206,8 +2206,6 @@ bool Application_Frame()
                 createNewNode = false;
 
                 BuildCsgNode(node);
-                // TODO: do i need to build all? not really, maybe import/export changes this
-                //BuildNodes();
 
                 ed::NodeId new_node_id = std::visit([](auto& n) {return n.id; }, *node);
                 ed::SetNodePosition(new_node_id, newNodePosition);
