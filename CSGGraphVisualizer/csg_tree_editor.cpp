@@ -89,7 +89,7 @@ struct CsgLink
 };
 
 static Expr<CsgNode>* selected_root;
-static Expr<CsgNode>* everything_root;
+static Expr<CsgNode>* everything_root = nullptr;
 static bool graph_changed;
 static bool render_all = true; // TODO: add checkbox selector, default:false
 static bool generate_clicked; // TODO: change according to final logic generation/autogeneration logic
@@ -416,10 +416,10 @@ static void SelectRootNode()
 
 static void SelectAllRoots()
 {
-    // TODO: where/how to do this, dont delete, update when roots change
-    delete everything_root;
-    // TODO: vector in union should be a pointer
-    everything_root = new Expr<CsgNode>{ Union<CsgNode>{CsgNode{ GetNextId() }, s_roots} };
+    if (!everything_root)
+        everything_root = new Expr<CsgNode>{ Union<CsgNode>{CsgNode{ GetNextId() }, s_roots} };
+    else
+        std::get<Union<CsgNode>>(*everything_root).a = s_roots;
 
     selected_root = everything_root;
 }
@@ -757,6 +757,7 @@ void Application_Finalize()
     {
         ed::DestroyEditor(m_Editor);
         m_Editor = nullptr;
+        delete everything_root;
     }
 }
 
