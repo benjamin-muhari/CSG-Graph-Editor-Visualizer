@@ -3,6 +3,7 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include <ImGui/imgui_internal.h>
 #include "glm/glm.hpp"
+#include "nlohmann-json/json.hpp"
 
 #include "CodeGen/expr.h"
 #include "CodeGen/codegen.h"
@@ -22,6 +23,10 @@
 //namespace CsgTreeEditor {
 
 namespace ed = ax::NodeEditor;
+
+// Json parsing
+using json = nlohmann::json;
+using namespace nlohmann::literals;
 
 // TODO: Most likely not needed
 enum class PinType
@@ -93,6 +98,7 @@ static Expr<CsgNode>* everything_root = nullptr;
 static bool graph_changed;
 static bool render_all = true; // TODO: add checkbox selector, default:false
 static bool generate_clicked; // TODO: change according to final logic generation/autogeneration logic
+static std::string savefile = "export.json";
 
 // Save mouse position at the time of rightclick, because its weird if querried inside some imgui stuff
 static ImVec2 newNodePosition;
@@ -519,6 +525,96 @@ static bool GenerateSdf()
     //ed::ClearSelection();
 
     return true;
+}
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Box<CsgNode>, material, x, y, z)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(ImVec2, x, y)
+
+template<typename Fields>
+struct ExportVisitor
+{
+    json* result;
+    
+    void SaveSubExpr(json& jnode)
+    {
+
+    }
+
+    void operator()(Box<Fields>& expr)
+    {
+        json jnode = expr;
+        //SaveSubExpr(jnode)
+        jnode["location"] = ed::GetNodePosition(expr.id);
+        //jnode["link"] = // somehow save links into as well
+        (*result)[std::to_string(expr.id.Get())] = jnode;
+    }
+    void operator()(Sphere<Fields>& expr)
+    {
+        
+    }
+    void operator()(Cylinder<Fields>& expr)
+    {
+        
+    }
+    void operator()(PlaneXZ<Fields>& expr)
+    {
+        
+    }
+    // --------------------------------------------------------
+    // --------------------------------------------------------
+    void operator()(Move<Fields>& expr)
+    {
+        if (expr.a != nullptr)
+            visit(*this, *expr.a);
+    }
+    void operator()(Rotate<Fields>& expr)
+    {
+        if (expr.a != nullptr)
+            visit(*this, *expr.a);
+    }
+    void operator()(Offset<Fields>& expr)
+    {
+        if (expr.a != nullptr)
+            visit(*this, *expr.a);
+    }
+    void operator()(Invert<Fields>& expr)
+    {
+        if (expr.a != nullptr)
+            visit(*this, *expr.a);
+    }
+    // --------------------------------------------------------
+    // --------------------------------------------------------
+    void operator()(Intersect<Fields>& expr)
+    {
+        for (auto& leaf : expr.a)
+            visit(*this, *leaf);
+    }
+    void operator()(Union<Fields>& expr)
+    {
+        for (auto& leaf : expr.a)
+            visit(*this, *leaf);
+    }
+};
+
+static void SaveNodes()
+{
+    json* result = new json();
+
+    for (auto& root : s_roots)
+        std::visit(ExportVisitor<CsgNode>{ result }, *root);
+
+    std::ofstream fo(savefile);
+    fo << std::setw(4) << *result << std::endl;
+
+    delete result;
+}
+
+static void LoadNodes()
+{
+    std::ifstream fi(savefile);
+    json data = json::parse(fi);
+
+    std::cout << data << "\n";
 }
 
 template<typename Fields>
@@ -1014,6 +1110,9 @@ void ShowLeftPane(float paneWidth)
 
     //ImGui::BeginHorizontal("Selection Stats", ImVec2(paneWidth, 0));
     ImGui::Text("Changed %d time%s", changeCount, changeCount > 1 ? "s" : "");
+    //--------------------------------------------------------------
+    //--------------------------------------------------------------
+
     // TODO: MYCODE
     //if (ImGui::Button("Select root"))
     //    SelectRootNode();
@@ -1023,6 +1122,13 @@ void ShowLeftPane(float paneWidth)
     int objcount = 100;
     if (ImGui::Button("Genereate test objects"))
         PerfTestGenerateSdf(objcount);
+    if (ImGui::Button("Save"))
+        SaveNodes();
+    if (ImGui::Button("Load (previous save)"))
+        LoadNodes();
+
+    //--------------------------------------------------------------
+    //--------------------------------------------------------------
     //ImGui::Spring();
     if (ImGui::Button("Deselect All"))
         ed::ClearSelection();
