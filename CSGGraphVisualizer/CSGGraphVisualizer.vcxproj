@@ -178,6 +178,7 @@
     <ClInclude Include="ImguiNodeEditor\imgui_extra_math.h" />
     <ClInclude Include="ImguiNodeEditor\imgui_node_editor.h" />
     <ClInclude Include="ImguiNodeEditor\imgui_node_editor_internal.h" />
+    <ClInclude Include="nlohmann-json\json.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

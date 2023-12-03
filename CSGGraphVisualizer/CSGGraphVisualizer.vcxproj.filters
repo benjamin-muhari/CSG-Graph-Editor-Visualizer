@@ -17,6 +17,9 @@
     <Filter Include="Shaders">
       <UniqueIdentifier>{9375f8db-c7b7-4cba-8f0b-677f6b3ccd6c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="nlohmann-json">
+      <UniqueIdentifier>{9c8ca7b1-9911-4e18-b455-1d74535749f1}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -149,5 +152,8 @@
       <Filter>ImGuiNodeEditor</Filter>
     </ClInclude>
     <ClInclude Include="application.h" />
+    <ClInclude Include="nlohmann-json\json.hpp">
+      <Filter>nlohmann-json</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
