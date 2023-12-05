@@ -98,11 +98,14 @@ static Expr<CsgNode>* everything_root = nullptr;
 static bool graph_changed;
 static bool render_all = true; // TODO: add checkbox selector, default:false
 static bool generate_clicked; // TODO: change according to final logic generation/autogeneration logic
+static bool reloaded_editor = false;
 static std::string savefile = "export.json";
 
 // Save mouse position at the time of rightclick, because its weird if querried inside some imgui stuff
 static ImVec2 newNodePosition;
-
+// TODO .h
+static void ConnectCsgNodes(CsgPin* startPin, CsgPin* endPin);
+static void BuildCsgNode(Expr<CsgNode>* node);
 
 // TODO: Test if need all, try delete ?
 #include <map>
@@ -217,6 +220,11 @@ static int s_NextId = 1;
 static int GetNextId()
 {
     return s_NextId++;
+}
+
+static void ResetIdCounter()
+{
+    s_NextId = 1;
 }
 
 static void TouchNode(ed::NodeId id)
@@ -527,58 +535,128 @@ static bool GenerateSdf()
     return true;
 }
 
+namespace glm {
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(glm::vec3, x, y, z)
+
+    void to_json(json& j, const glm::mat3& m)
+    {
+        j = json{
+            {"x0", m[0].x}, {"x1", m[1].x}, {"x2", m[2].x},
+            {"y0", m[0].y}, {"y1", m[1].y}, {"y2", m[2].y},
+            {"z0", m[0].z}, {"z1", m[1].z}, {"z2", m[2].z},
+        };
+    }
+
+    void from_json(const json& j, glm::mat3& m)
+    {
+        float x0, x1, x2, y0, y1, y2, z0, z1, z2;
+        j.at("x0").get_to(x0);
+        j.at("x1").get_to(x1);
+        j.at("x2").get_to(x2);
+
+        j.at("y0").get_to(y0);
+        j.at("y1").get_to(y1);
+        j.at("y2").get_to(y2);
+
+        j.at("z0").get_to(z0);
+        j.at("z1").get_to(z1);
+        j.at("z2").get_to(z2);
+        // glm:mat3 uses coloumn-wise assignemnt order
+        m = glm::mat3(x0, y0, z0, x1, y1, z1, x2, y2, z2);
+    }
+}
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Box<CsgNode>, material, x, y, z)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Sphere<CsgNode>, material, r)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Cylinder<CsgNode>, material, dir, x, y)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PlaneXZ<CsgNode>, material)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Move<CsgNode>, material, v)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Rotate<CsgNode>, material, m, _rotation_type, angle_degree)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Offset<CsgNode>, material, r)
+
+//// Dont need to save any node data from these
+//NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Invert<CsgNode>, material)
+//NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Union<CsgNode>, material)
+//NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Intersect<CsgNode>, material)
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(ImVec2, x, y)
+
+enum class CsgNodeType
+{
+    Box,
+    Sphere,
+    Cylinder,
+    PlaneXZ,
+    Move,
+    Rotate,
+    Offset,
+    Invert,
+    Intersect,
+    Union
+};
 
 template<typename Fields>
 struct ExportVisitor
 {
-    json* result;
+    std::vector<json>& jnodes;
     
-    void SaveSubExpr(json& jnode)
+    void SaveNode(json& jnode, ed::NodeId& nodeid, CsgNodeType type)
     {
-
+        jnode["id"] = nodeid.Get();
+        jnode["type"] = type;
+        jnode["location"] = ed::GetNodePosition(nodeid);
+        jnodes.emplace_back(jnode);
+        //(*result)["nodes"]["node:" + std::to_string(expr.id.Get())] = jnode;
+        // ^result was type json*, vector better to make list
     }
 
     void operator()(Box<Fields>& expr)
     {
         json jnode = expr;
-        //SaveSubExpr(jnode)
-        jnode["location"] = ed::GetNodePosition(expr.id);
-        //jnode["link"] = // somehow save links into as well
-        (*result)[std::to_string(expr.id.Get())] = jnode;
+        SaveNode(jnode, expr.id, CsgNodeType::Box);
     }
     void operator()(Sphere<Fields>& expr)
     {
-        
+        json jnode = expr;
+        SaveNode(jnode, expr.id, CsgNodeType::Sphere);
     }
     void operator()(Cylinder<Fields>& expr)
     {
-        
+        json jnode = expr;
+        SaveNode(jnode, expr.id, CsgNodeType::Cylinder);
     }
     void operator()(PlaneXZ<Fields>& expr)
     {
-        
+        json jnode = expr;
+        SaveNode(jnode, expr.id, CsgNodeType::PlaneXZ);
     }
     // --------------------------------------------------------
     // --------------------------------------------------------
     void operator()(Move<Fields>& expr)
     {
+        json jnode = expr;
+        SaveNode(jnode, expr.id, CsgNodeType::Move);
         if (expr.a != nullptr)
             visit(*this, *expr.a);
     }
     void operator()(Rotate<Fields>& expr)
     {
+        json jnode = expr;
+        SaveNode(jnode, expr.id, CsgNodeType::Rotate);
         if (expr.a != nullptr)
             visit(*this, *expr.a);
     }
     void operator()(Offset<Fields>& expr)
     {
+        json jnode = expr;
+        SaveNode(jnode, expr.id, CsgNodeType::Offset);
         if (expr.a != nullptr)
             visit(*this, *expr.a);
     }
     void operator()(Invert<Fields>& expr)
     {
+        json jnode;
+        SaveNode(jnode, expr.id, CsgNodeType::Invert);
         if (expr.a != nullptr)
             visit(*this, *expr.a);
     }
@@ -586,11 +664,15 @@ struct ExportVisitor
     // --------------------------------------------------------
     void operator()(Intersect<Fields>& expr)
     {
+        json jnode;
+        SaveNode(jnode, expr.id, CsgNodeType::Intersect);
         for (auto& leaf : expr.a)
             visit(*this, *leaf);
     }
     void operator()(Union<Fields>& expr)
     {
+        json jnode;
+        SaveNode(jnode, expr.id, CsgNodeType::Union);
         for (auto& leaf : expr.a)
             visit(*this, *leaf);
     }
@@ -598,15 +680,38 @@ struct ExportVisitor
 
 static void SaveNodes()
 {
-    json* result = new json();
+    json result;
+    std::vector<json> jnodes;
+    std::vector<json> jlinks;
 
     for (auto& root : s_roots)
-        std::visit(ExportVisitor<CsgNode>{ result }, *root);
+        std::visit(ExportVisitor<CsgNode>{ jnodes }, *root);
+    
+    for (auto& link : s_Links)
+    {
+        ed::NodeId startnodeid = std::visit([](auto& n) { return n.id; }, *link.StartPin->Node);
+        ed::NodeId endnodeid = std::visit([](auto& n) { return n.id; }, *link.EndPin->Node);
+
+        // "links" : { "link:id":{ "start_id":"end_id"}, "link:id2":{ "start_id":"end_id"}, ...}
+        // Resulting format ^
+        //(*result)["links"][std::to_string(link.ID.Get())][std::to_string(startnodeid.Get())] = std::to_string(endnodeid.Get());
+        
+        // "links" : { "link:id":{ "sid":"start_id","eid":"end_id"}, "link:id2":{ "sid":"start_id","eid":"end_id"}, ...}
+        // Resulting format ^
+        //result["links"]["link:" + std::to_string(link.ID.Get())]["sid"] = std::to_string(startnodeid.Get());
+        //result["links"]["link:" + std::to_string(link.ID.Get())]["eid"] = std::to_string(endnodeid.Get());
+
+        json jlink;
+        jlink["startid"] = startnodeid.Get();
+        jlink["endid"] = endnodeid.Get();
+        jlinks.emplace_back(jlink);
+    }
+
+    result["nodes"] = jnodes;
+    result["links"] = jlinks;
 
     std::ofstream fo(savefile);
-    fo << std::setw(4) << *result << std::endl;
-
-    delete result;
+    fo << std::setw(4) << result << std::endl;
 }
 
 static void LoadNodes()
@@ -614,7 +719,171 @@ static void LoadNodes()
     std::ifstream fi(savefile);
     json data = json::parse(fi);
 
-    std::cout << data << "\n";
+    // Reload fresh editor context
+    Application_Finalize();
+    Application_Initialize();
+    graph_changed = true;
+    
+    std::vector<json> jnodes = data["nodes"];
+    std::vector<json> jlinks = data["links"];
+    std::map<int, Expr<CsgNode>*> oldId_newNode_map;
+
+    // Load nodes
+    for (auto& jnode : jnodes)
+    {
+        Expr<CsgNode>* node = nullptr;
+        CsgNodeType type = jnode["type"];
+
+        switch (type)
+        {
+        case (CsgNodeType::Box):
+        {
+            Box<CsgNode> box = jnode;
+            box.id = GetNextId();
+            node = new Expr<CsgNode>{ box };
+            std::get<Box<CsgNode>>(*node).InputPins.emplace_back(GetNextId(), "<<");
+            break;
+        }
+        case (CsgNodeType::Sphere):
+        {
+            Sphere<CsgNode> sphere = jnode;
+            sphere.id = GetNextId();
+            node = new Expr<CsgNode>{ sphere };
+            std::get<Sphere<CsgNode>>(*node).InputPins.emplace_back(GetNextId(), "<<");
+            break;
+        }
+        case (CsgNodeType::Cylinder):
+        {
+            Cylinder<CsgNode> cyl = jnode;
+            cyl.id = GetNextId();
+            node = new Expr<CsgNode>{ cyl };
+            std::get<Cylinder<CsgNode>>(*node).InputPins.emplace_back(GetNextId(), "<<");
+            break;
+        }
+        case (CsgNodeType::PlaneXZ):
+        {
+            PlaneXZ<CsgNode> plane = jnode;
+            plane.id = GetNextId();
+            node = new Expr<CsgNode>{ plane };
+            std::get<PlaneXZ<CsgNode>>(*node).InputPins.emplace_back(GetNextId(), "<<");
+            break;
+        }
+        case (CsgNodeType::Move):
+        {
+            // TODO: save values
+            Move<CsgNode> move = jnode;
+            move.id = GetNextId();
+            node = new Expr<CsgNode>{ move };
+            std::get<Move<CsgNode>>(*node).InputPins.emplace_back(GetNextId(), "<<");
+            std::get<Move<CsgNode>>(*node).OutputPins.emplace_back(GetNextId(), "<<");
+            break;
+        }
+        case (CsgNodeType::Rotate):
+        {
+            // TODO: save values
+            Rotate<CsgNode> rot = jnode;
+            rot.id = GetNextId();
+            node = new Expr<CsgNode>{ rot };
+            std::get<Rotate<CsgNode>>(*node).InputPins.emplace_back(GetNextId(), "<<");
+            std::get<Rotate<CsgNode>>(*node).OutputPins.emplace_back(GetNextId(), "<<");
+            break;
+        }
+        case (CsgNodeType::Offset):
+        {
+            Offset<CsgNode> off = jnode;
+            off.id = GetNextId();
+            node = new Expr<CsgNode>{ off };
+            std::get<Offset<CsgNode>>(*node).InputPins.emplace_back(GetNextId(), "<<");
+            std::get<Offset<CsgNode>>(*node).OutputPins.emplace_back(GetNextId(), "<<");
+            break;
+        }
+        case (CsgNodeType::Invert):
+        {
+            Invert<CsgNode> inv; // = jnode;
+            inv.id = GetNextId();
+            node = new Expr<CsgNode>{ inv };
+            std::get<Invert<CsgNode>>(*node).InputPins.emplace_back(GetNextId(), "<<");
+            std::get<Invert<CsgNode>>(*node).OutputPins.emplace_back(GetNextId(), "<<");
+            break;
+        }
+        case (CsgNodeType::Intersect):
+        {
+            Intersect<CsgNode> inter; // = jnode;
+            inter.id = GetNextId();
+            node = new Expr<CsgNode>{ inter };
+            std::get<Intersect<CsgNode>>(*node).InputPins.emplace_back(GetNextId(), "<<");
+            auto outputs = &std::get<Intersect<CsgNode>>(*node).OutputPins;
+            outputs->emplace_back(GetNextId(), "<<");
+            outputs->emplace_back(GetNextId(), "<<");
+            outputs->emplace_back(GetNextId(), "<<");
+            outputs->emplace_back(GetNextId(), "<<");
+            break;
+        }
+        case (CsgNodeType::Union):
+        {
+            Union<CsgNode> uni; // = jnode;
+            uni.id = GetNextId();
+            node = new Expr<CsgNode>{ uni };
+            std::get<Union<CsgNode>>(*node).InputPins.emplace_back(GetNextId(), "<<");
+            auto outputs = &std::get<Union<CsgNode>>(*node).OutputPins;
+            outputs->emplace_back(GetNextId(), "<<");
+            outputs->emplace_back(GetNextId(), "<<");
+            outputs->emplace_back(GetNextId(), "<<");
+            outputs->emplace_back(GetNextId(), "<<");
+            break;
+        }}
+        // Save the oldid corresponding to the new node, to load links from savefile
+        int oldId = jnode["id"];
+        oldId_newNode_map[oldId] = node;
+        // TODO: need to do anything more with a node?
+
+        BuildCsgNode(node);
+        s_roots.emplace_back(node);
+        // Set position in UI
+        auto newNodeId = std::visit([](auto& n) {return n.id; }, *node);
+        ed::SetNodePosition(newNodeId, jnode["location"].template get<ImVec2>());
+    }
+    // Load links
+    for (auto& jlink : jlinks)
+    {
+        std::cout << "\n" << jlink;
+        int startNodeId_old = jlink["startid"].template get<int>();
+        int endNodeId_old = jlink["endid"].template get<int>();
+        //int startNodeId = jlink["startid"].template get<int>();
+        //int endNodeId = jlink["endid"].template get<int>();
+
+        auto& startNode = oldId_newNode_map[startNodeId_old];
+        auto& endNode = oldId_newNode_map[endNodeId_old];
+
+        CsgPin* startPin = nullptr;
+        auto outputPins = std::visit([](auto& n) {return &n.OutputPins; }, *startNode);
+        // Union/Intersections can have multiple links, insert into the first EMPTY pin
+        if (std::get_if<Union<CsgNode>>(startNode) || std::get_if<Intersect<CsgNode>>(startNode))
+        {
+            for (auto& pin : *outputPins)
+            {
+                // Find if the pin is already used for another link
+                ed::PinId pinid = pin.ID;
+                auto link_from_pin =
+                    std::find_if(s_Links.begin(), s_Links.end(),
+                        [pinid](auto& link) { return link.StartPin->ID == pinid; });
+                // If the pin is empty, use it for creating the next link
+                if (link_from_pin == s_Links.end())
+                {
+                    startPin = &pin;
+                    break;
+                }
+            }
+        }
+        else
+            startPin = &(*outputPins)[0];
+
+        CsgPin* endPin = std::visit([](auto& n) {return &(n.InputPins[0]); }, *endNode);
+
+        ConnectCsgNodes(startPin, endPin);
+    }
+
+    reloaded_editor = true;
 }
 
 template<typename Fields>
@@ -805,6 +1074,10 @@ const char* Application_GetName()
 
 void Application_Initialize()
 {
+    // Reset relevant fields on load
+    ResetIdCounter();
+    graph_changed = false;
+
     ed::Config config;
 
     config.SettingsFile = "CSG_Graph_Visualizer.json";
@@ -847,13 +1120,83 @@ void Application_Initialize()
     //auto& io = ImGui::GetIO();
 }
 
+template<typename Fields>
+struct DestructNodesVisitor
+{
+    void operator()(Box<Fields>& expr)
+    {
+        delete &expr;
+    }
+    void operator()(Sphere<Fields>& expr)
+    {
+        delete &expr;
+    }
+    void operator()(Cylinder<Fields>& expr)
+    {
+        delete &expr;
+    }
+    void operator()(PlaneXZ<Fields>& expr)
+    {
+        delete &expr;
+    }
+    // --------------------------------------------------------
+    // --------------------------------------------------------
+    void operator()(Move<Fields>& expr)
+    {
+        if (expr.a != nullptr)
+            visit(*this, *expr.a);
+        delete &expr;
+    }
+    void operator()(Rotate<Fields>& expr)
+    {
+        if (expr.a != nullptr)
+            visit(*this, *expr.a);
+        delete &expr;
+    }
+    void operator()(Offset<Fields>& expr)
+    {
+        if (expr.a != nullptr)
+            visit(*this, *expr.a);
+        delete &expr;
+    }
+    void operator()(Invert<Fields>& expr)
+    {
+        if (expr.a != nullptr)
+            visit(*this, *expr.a);
+        delete &expr;
+    }
+    // --------------------------------------------------------
+    // --------------------------------------------------------
+    void operator()(Intersect<Fields>& expr)
+    {
+        for (auto& leaf : expr.a)
+            visit(*this, *leaf);
+        delete &expr;
+    }
+    void operator()(Union<Fields>& expr)
+    {
+        for (auto& leaf : expr.a)
+            visit(*this, *leaf);
+        delete &expr;
+    }
+};
+
 void Application_Finalize()
 {
     if (m_Editor)
     {
         ed::DestroyEditor(m_Editor);
         m_Editor = nullptr;
+
         delete everything_root;
+        everything_root = nullptr;
+
+        // Recursively delete all nodes
+        for (auto& root : s_roots)
+            std::visit(DestructNodesVisitor<CsgNode>{}, *root);
+
+        s_roots.clear();
+        s_Links.clear();
     }
 }
 
@@ -1894,6 +2237,19 @@ bool Application_Frame()
 
     ShowLeftPane(leftPaneWidth - 4.0f);    
     ImGui::SameLine(0.0f, 12.0f);
+
+    static int navigate_framedelay = 0;
+    // Navigate to nodes loaded from .json file (by clicking Load button on UI)
+    if (reloaded_editor)
+    {
+        // Need a few frames delay after loading nodes for ed::NavigateToContent() to work
+        if (navigate_framedelay++ >= 2)
+        {
+            ed::NavigateToContent();
+            reloaded_editor = false;
+            navigate_framedelay = 0;
+        }
+    }
 
     ed::Begin("Node editor");
     {
