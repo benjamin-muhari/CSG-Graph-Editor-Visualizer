@@ -100,6 +100,7 @@ static bool render_all = true; // TODO: add checkbox selector, default:false
 static bool generate_clicked; // TODO: change according to final logic generation/autogeneration logic
 static bool reloaded_editor = false;
 static std::string savefile = "export.json";
+static int material_array_size = 7;
 
 // Save mouse position at the time of rightclick, because its weird if querried inside some imgui stuff
 static ImVec2 newNodePosition;
@@ -1491,6 +1492,27 @@ void ShowLeftPane(float paneWidth)
     ImGui::EndChild();
 }
 
+static bool MaterialEditor(int& node_mat)
+{
+    int mat = node_mat;
+    bool mat_changed;
+    mat_changed = ImGui::InputInt("Material", &mat);
+    if (mat_changed)
+    {
+        if (mat < 0)
+            mat = 0;
+        if (mat >= material_array_size)
+            mat = material_array_size - 1;
+
+        if (node_mat != mat)
+        {
+            node_mat = mat;
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool Create_CsgNode_Box(Box<CsgNode>& node)
 {
     bool changed = false;
@@ -1510,7 +1532,7 @@ static bool Create_CsgNode_Box(Box<CsgNode>& node)
     float transl_xyz[3] = { node.x, node.y, node.z };
     changed = changed || ImGui::InputFloat3("XYZ", transl_xyz, format);
     node.x = transl_xyz[0]; node.y = transl_xyz[1]; node.z = transl_xyz[2];
-    changed = changed || ImGui::InputInt("Material", &node.material);
+    changed = changed || MaterialEditor(node.material);
     ImGui::PopID();
     ImGui::PopItemWidth();
 
@@ -1541,7 +1563,7 @@ static bool Create_CsgNode_Sphere(Sphere<CsgNode> &node)
     ImGui::PushItemWidth(70);
     ImGui::PushID(node.id.AsPointer());
     changed = changed || ImGui::InputFloat("Radius", &node.r, 0.0F, 0.0F, format);
-    changed = changed || ImGui::InputInt("Material", &node.material);
+    changed = changed || MaterialEditor(node.material);
     ImGui::PopID();
     ImGui::PopItemWidth();
 
@@ -1623,7 +1645,7 @@ static bool Create_CsgNode_Cylinder(Cylinder<CsgNode>& node)
     {
         node.y = std::numeric_limits<float>::infinity();
     }
-    changed = changed || ImGui::InputInt("Material", &node.material);
+    changed = changed || MaterialEditor(node.material);
 
     ImGui::PopID();
     ImGui::PopItemWidth();
@@ -1649,7 +1671,7 @@ static bool Create_CsgNode_PlaneXZ(PlaneXZ<CsgNode>& node)
 
     ImGui::PushItemWidth(70);
     ImGui::PushID(node.id.AsPointer());
-    changed = changed || ImGui::InputInt("Material", &node.material);
+    changed = changed || MaterialEditor(node.material);
     ImGui::PopID();
     ImGui::PopItemWidth();
 
