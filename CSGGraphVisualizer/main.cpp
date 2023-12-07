@@ -84,6 +84,9 @@ void raytrace_generation_demo()
 				*raytraceProgram << "Shaders/raytrace.vert"_vert << "Shaders/gen_raytrace.frag"_frag << df::LinkProgram;
 			}
 
+			// Update resolution in case the window is resized
+			iResolution = df::Backbuffer.getSize();
+
 			df::Backbuffer << df::Clear() << *raytraceProgram << "iResolution" << iResolution
 				<< "iTime" << ms
 				<< "texImg" << testTex
