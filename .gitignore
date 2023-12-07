@@ -3,6 +3,7 @@
 CSG_Graph_Visualizer.json
 export.json
 gen_raytrace.frag
+/CSGGraphVisualizer/local/
 
 *imgui.ini
 
