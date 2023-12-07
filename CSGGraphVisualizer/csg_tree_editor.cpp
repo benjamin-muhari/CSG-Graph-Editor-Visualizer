@@ -3,6 +3,7 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include <ImGui/imgui_internal.h>
 #include "glm/glm.hpp"
+#include "glm/gtc/matrix_transform.hpp"
 #include "nlohmann-json/json.hpp"
 
 #include "CodeGen/expr.h"
@@ -569,10 +570,11 @@ namespace glm {
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Box<CsgNode>, material, x, y, z)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Sphere<CsgNode>, material, r)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Cylinder<CsgNode>, material, dir, x, y)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Cylinder<CsgNode>, material, dir, x) // save y manually, inf causes exception
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(PlaneXZ<CsgNode>, material)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Move<CsgNode>, material, v)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Rotate<CsgNode>, material, m, _rotation_type, angle_degree)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Rotate<CsgNode>, material, m, ui_rotation_type, ui_v,
+                                    ui_x_degree, ui_y_degree, ui_z_degree, ui_vec_radian)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Offset<CsgNode>, material, r)
 
 //// Dont need to save any node data from these
@@ -624,6 +626,10 @@ struct ExportVisitor
     void operator()(Cylinder<Fields>& expr)
     {
         json jnode = expr;
+        if (expr.y == std::numeric_limits<float>::infinity())
+            jnode["y"] = "inf";
+        else
+            jnode["y"] = expr.y;
         SaveNode(jnode, expr.id, CsgNodeType::Cylinder);
     }
     void operator()(PlaneXZ<Fields>& expr)
@@ -756,6 +762,11 @@ static void LoadNodes()
         case (CsgNodeType::Cylinder):
         {
             Cylinder<CsgNode> cyl = jnode;
+            // Manually load y value due to inf
+            if (jnode["y"] == "inf")
+                cyl.y = std::numeric_limits<float>::infinity();
+            else
+                cyl.y = jnode["y"].template get<float>();
             cyl.id = GetNextId();
             node = new Expr<CsgNode>{ cyl };
             std::get<Cylinder<CsgNode>>(*node).InputPins.emplace_back(GetNextId(), "<<");
@@ -771,7 +782,6 @@ static void LoadNodes()
         }
         case (CsgNodeType::Move):
         {
-            // TODO: save values
             Move<CsgNode> move = jnode;
             move.id = GetNextId();
             node = new Expr<CsgNode>{ move };
@@ -781,7 +791,6 @@ static void LoadNodes()
         }
         case (CsgNodeType::Rotate):
         {
-            // TODO: save values
             Rotate<CsgNode> rot = jnode;
             rot.id = GetNextId();
             node = new Expr<CsgNode>{ rot };
@@ -1760,21 +1769,31 @@ static bool Create_CsgNode_Rotate(Rotate<CsgNode>& node)
 
     // global static vector, struct: nodeid, angle, rotdir enum
     // TODO: load rtype_ind from globalvector
-    int rtype_ind = node._rotation_type;
-    changed = changed || ImGui::RadioButton("X", &rtype_ind, 0); ImGui::SameLine();
-    changed = changed || ImGui::RadioButton("Y", &rtype_ind, 1); ImGui::SameLine();
-    changed = changed || ImGui::RadioButton("Z", &rtype_ind, 2); ImGui::SameLine();
-    ImGui::RadioButton("3x3", &rtype_ind, 3);
-    node._rotation_type = static_cast<Rotate<CsgNode>::rotation_type>(rtype_ind);
+
+    int rtype_ind = node.ui_rotation_type;
+    changed = changed || ImGui::RadioButton("XYZ", &rtype_ind, 0); ImGui::SameLine();
+    changed = changed || ImGui::RadioButton("Around Vec3", &rtype_ind, 1); ImGui::SameLine();
+    ImGui::RadioButton("M3x3", &rtype_ind, 2);
+    node.ui_rotation_type = static_cast<Rotate<CsgNode>::rotation_type>(rtype_ind);
     // TODO: save rtype_ind to global vector
 
     // TODO: load angle from globalvector
-    if (rtype_ind == 0 || rtype_ind == 1 || rtype_ind == 2)
+    if (rtype_ind == 0)
     {
-        changed = changed || ImGui::InputInt("Angle", &node.angle_degree);
+        changed = changed || ImGui::InputInt("Around X", &node.ui_x_degree);
+        changed = changed || ImGui::InputInt("Around Y", &node.ui_y_degree);
+        changed = changed || ImGui::InputInt("Around Z", &node.ui_z_degree);
         // TODO: save angle to global vector
     }
-    if (rtype_ind == 3 /*TODO:Remove if no debuging*/ || true)
+    if (rtype_ind == 1)
+    {
+        // TODO: no recompile (MAYBE)
+        float axis_vector_xyz[3] = { node.ui_v.x, node.ui_v.y, node.ui_v.z };
+        changed = changed || ImGui::InputFloat3("Vector",axis_vector_xyz, "%.1f");
+        node.ui_v.x = axis_vector_xyz[0]; node.ui_v.y = axis_vector_xyz[1]; node.ui_v.z = axis_vector_xyz[2];
+        changed = changed || ImGui::InputFloat("Angle", &node.ui_vec_radian,1.0F,0.0F, "%.1f");
+    }
+    if (rtype_ind == 2 /*TODO:Remove if no debuging*/ /* || true*/)
     {
         //ImGui::PushID(&row1);
         changed = changed || ImGui::InputFloat3("##1", row1, format);
@@ -1787,15 +1806,24 @@ static bool Create_CsgNode_Rotate(Rotate<CsgNode>& node)
         switch (rtype_ind)
         {
         case (0):
-            node.m = rotateXdeg(node.angle_degree);
+            glm::mat3 m_rotx = node.ui_x_degree != 0 ? rotateXdeg(node.ui_x_degree) : glm::mat3(1);
+            glm::mat3 m_roty = node.ui_y_degree != 0 ? rotateYdeg(node.ui_y_degree) : glm::mat3(1);
+            glm::mat3 m_rotz = node.ui_z_degree != 0 ? rotateZdeg(node.ui_z_degree) : glm::mat3(1);
+            node.m = m_rotz * m_roty * m_rotx;
             break;
         case (1):
-            node.m = rotateYdeg(node.angle_degree);
-            break;
+            if (node.ui_v == glm::vec3(0) || node.ui_vec_radian == 0)
+            {
+                changed = false;
+                break;
+            }                
+            else
+            {
+                glm::mat4 m_rotm(1);
+                node.m = glm::rotate(m_rotm, (float)glm::radians(node.ui_vec_radian), node.ui_v);
+                break;
+            }
         case (2):
-            node.m = rotateZdeg(node.angle_degree);
-            break;
-        case (3):
             // glm uses column-wise assignment
             node.m = glm::mat3(row1[0], row2[0], row3[0], row1[1], row2[1], row3[1], row1[2], row2[2], row3[2]);
             // Incorrect row-wise assignment

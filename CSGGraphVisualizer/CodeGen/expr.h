@@ -69,9 +69,13 @@ struct Rotate : Fields {
     glm::mat3 m;
     Expr<Fields>* a;
     // Node Editor UI fields
-    enum rotation_type {X,Y,Z,M3x3};
-    rotation_type _rotation_type;
-    int angle_degree;
+    enum rotation_type {XYZ,Vec3,M3x3};
+    rotation_type ui_rotation_type;
+    glm::vec3 ui_v;
+    int ui_x_degree;
+    int ui_y_degree;
+    int ui_z_degree;
+    float ui_vec_radian;
 };
 
 template<typename Fields>
