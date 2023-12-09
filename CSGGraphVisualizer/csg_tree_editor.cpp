@@ -5,6 +5,7 @@
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 #include "nlohmann-json/json.hpp"
+#include "ImFileDialog/ImFileDialog.h"
 
 #include "CodeGen/expr.h"
 #include "CodeGen/codegen.h"
@@ -685,7 +686,7 @@ struct ExportVisitor
     }
 };
 
-static void SaveNodes()
+static void SaveNodes(std::string filename = savefile)
 {
     json result;
     std::vector<json> jnodes;
@@ -717,13 +718,15 @@ static void SaveNodes()
     result["nodes"] = jnodes;
     result["links"] = jlinks;
 
-    std::ofstream fo(savefile);
+    std::ofstream fo(filename);
     fo << std::setw(4) << result << std::endl;
+
+    std::cout << "Successfully saved to: \"" << filename << "\"\n";
 }
 
-static void LoadNodes()
+static void LoadNodes(std::string filename = savefile)
 {
-    std::ifstream fi(savefile);
+    std::ifstream fi(filename);
     json data = json::parse(fi);
 
     // Reload fresh editor context
@@ -856,7 +859,7 @@ static void LoadNodes()
     // Load links
     for (auto& jlink : jlinks)
     {
-        std::cout << "\n" << jlink;
+        //std::cout << "\n" << jlink;
         int startNodeId_old = jlink["startid"].template get<int>();
         int endNodeId_old = jlink["endid"].template get<int>();
         //int startNodeId = jlink["startid"].template get<int>();
@@ -894,6 +897,7 @@ static void LoadNodes()
     }
 
     reloaded_editor = true;
+    std::cout << "Successfully loaded: \""<<filename<<"\"\n";
 }
 
 template<typename Fields>
@@ -1475,11 +1479,55 @@ void ShowLeftPane(float paneWidth)
     int objcount = 100;
     if (ImGui::Button("Genereate test objects"))
         PerfTestGenerateSdf(objcount);
-    if (ImGui::Button("Save"))
+    if (ImGui::Button("QuickSave"))
         SaveNodes();
-    if (ImGui::Button("Load (previous save)"))
+    if (ImGui::Button("QuickLoad"))
         LoadNodes();
-
+    if (ImGui::Button("Save"))
+    {
+        std::string save_directory = std::filesystem::current_path().u8string() + "\\local";
+        ifd::FileDialog::Instance().Save("SaveJsonDialog", "Saved nodes to .json file",
+                                "Json file (*.json){.json}", save_directory);
+    }
+    if (ifd::FileDialog::Instance().IsDone("SaveJsonDialog"))
+    {
+        if (ifd::FileDialog::Instance().HasResult())
+        {
+            std::string filename = ifd::FileDialog::Instance().GetResult().u8string();
+            printf("Saving nodes to: [%s]\n", filename.c_str());
+            try
+            {
+                SaveNodes(filename);
+            }
+            catch (...) {
+                std::cout << "Failed to save nodes to: \"" << filename << "\"\n";
+            }
+        }
+        ifd::FileDialog::Instance().Close();
+    }
+    if (ImGui::Button("Load"))
+    {
+        std::string load_directory = std::filesystem::current_path().u8string() + "\\local";
+        //ifd::FileDialog::Instance().Open("LoadJsonDialog", "Open a texture", "Image file (*.png;*.jpg;*.jpeg;*.bmp;*.tga){.png,.jpg,.jpeg,.bmp,.tga}, .*");
+        ifd::FileDialog::Instance().Open("LoadJsonDialog", "Open nodes from .json file",
+                            "Json file (*.json){.json}", false, load_directory);
+    }
+    if (ifd::FileDialog::Instance().IsDone("LoadJsonDialog"))
+    {
+        if (ifd::FileDialog::Instance().HasResult())
+        {
+            std::string filename = ifd::FileDialog::Instance().GetResult().u8string();
+            printf("Loading: [%s]\n", filename.c_str());
+            try
+            {
+                LoadNodes(filename);
+            }
+            catch (...) {
+                std::cout << "Failed to load: \"" << filename << "\"\n";
+            }
+        }
+        ifd::FileDialog::Instance().Close();
+    }
     //--------------------------------------------------------------
     //--------------------------------------------------------------
     //ImGui::Spring();

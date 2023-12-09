@@ -20,6 +20,9 @@
     <Filter Include="nlohmann-json">
       <UniqueIdentifier>{9c8ca7b1-9911-4e18-b455-1d74535749f1}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ImFileDialog">
+      <UniqueIdentifier>{e1da9e10-627f-4167-8382-160b6808c2d9}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -72,6 +75,9 @@
       <Filter>ImGuiNodeEditor</Filter>
     </ClCompile>
     <ClCompile Include="csg_tree_editor.cpp" />
+    <ClCompile Include="ImFileDialog\ImFileDialog.cpp">
+      <Filter>ImFileDialog</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="ImguiNodeEditor\imgui_bezier_math.inl">
@@ -154,6 +160,12 @@
     <ClInclude Include="application.h" />
     <ClInclude Include="nlohmann-json\json.hpp">
       <Filter>nlohmann-json</Filter>
+    </ClInclude>
+    <ClInclude Include="ImFileDialog\ImFileDialog.h">
+      <Filter>ImFileDialog</Filter>
+    </ClInclude>
+    <ClInclude Include="ImFileDialog\stb_image.h">
+      <Filter>ImFileDialog</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

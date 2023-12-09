@@ -143,6 +143,7 @@
     <ClCompile Include="CodeGen\ObjectsUtil.cpp" />
     <ClCompile Include="CodeGen\util.cpp" />
     <ClCompile Include="csg_tree_editor.cpp" />
+    <ClCompile Include="ImFileDialog\ImFileDialog.cpp" />
     <ClCompile Include="ImguiNodeEditor\crude_json.cpp" />
     <ClCompile Include="ImguiNodeEditor\imgui_canvas.cpp" />
     <ClCompile Include="ImguiNodeEditor\imgui_node_editor.cpp" />
@@ -172,6 +173,8 @@
     <ClInclude Include="CodeGen\Shadertoy.h" />
     <ClInclude Include="CodeGen\ui.h" />
     <ClInclude Include="CodeGen\util.h" />
+    <ClInclude Include="ImFileDialog\ImFileDialog.h" />
+    <ClInclude Include="ImFileDialog\stb_image.h" />
     <ClInclude Include="ImguiNodeEditor\crude_json.h" />
     <ClInclude Include="ImguiNodeEditor\imgui_bezier_math.h" />
     <ClInclude Include="ImguiNodeEditor\imgui_canvas.h" />
