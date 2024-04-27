@@ -14,6 +14,7 @@
 #include "ImFileDialog/ImFileDialog.h"
 
 #include "dragonfly_spirv_ext.h"
+#include "performance.h"
 
 void test1();
 void test_transforms();
@@ -23,6 +24,10 @@ void spirv_demo();
 GLuint loadShader(GLenum _shaderType, const char* _fileName);
 GLuint createProgram(GLuint vs_ID, GLuint fs_ID);
 void drawSpirvDemo(GLuint programID, GLuint texID, GLuint texLOC, df::VaoArrays& vao);
+
+// Clock/performance measure (needs to be global
+std::vector<CSGVMeasurment> measurements;
+std::map<std::string, int> measurement_counts;
 
 int main(int argc, char* args[])
 {
@@ -133,7 +138,9 @@ void raytrace_generation_demo()
 				auto gen_dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(gen_dur).count();
 				std::cout << "Compilation #" << (++recompile_count) << " took :" << gen_dur_ms << "ms\n\n";
 			}
-				
+			
+			//measurements.emplace_back(CSGVMeasurment(std::chrono::high_resolution_clock::now(), "asdqwe"));
+
 			bef_gen_time = std::chrono::high_resolution_clock::now();
 			recompile = Application_Frame();
 			if (recompile)

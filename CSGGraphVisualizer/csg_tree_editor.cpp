@@ -6,6 +6,7 @@
 #include "glm/gtc/matrix_transform.hpp"
 #include "nlohmann-json/json.hpp"
 #include "ImFileDialog/ImFileDialog.h"
+#include "performance.h"
 
 #include "CodeGen/expr.h"
 #include "CodeGen/codegen.h"
@@ -726,6 +727,11 @@ static void SaveNodes(std::string filename = savefile)
 
 static void LoadNodes(std::string filename = savefile)
 {
+    //// testing #TODO: DELETE
+    //InsertMeasurement("Quickload clicked");
+    //if (measurements.size() >= 4)
+    //    DumpMeasurements();
+
     std::ifstream fi(filename);
     json data = json::parse(fi);
 

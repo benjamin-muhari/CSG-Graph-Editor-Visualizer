@@ -78,6 +78,8 @@
     <ClCompile Include="ImFileDialog\ImFileDialog.cpp">
       <Filter>ImFileDialog</Filter>
     </ClCompile>
+    <ClCompile Include="dragonfly_spirv_ext.cpp" />
+    <ClCompile Include="performance.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="ImguiNodeEditor\imgui_bezier_math.inl">
@@ -167,5 +169,7 @@
     <ClInclude Include="ImFileDialog\stb_image.h">
       <Filter>ImFileDialog</Filter>
     </ClInclude>
+    <ClInclude Include="dragonfly_spirv_ext.h" />
+    <ClInclude Include="performance.h" />
   </ItemGroup>
 </Project>
