@@ -20,10 +20,11 @@ void test1();
 void test_transforms();
 void raytrace_generation_demo();
 void ImFileDialog_Initialize();
-void spirv_demo();
+void raw_ogl_demo();
+void test_double_attach_demo();
 GLuint loadShader(GLenum _shaderType, const char* _fileName);
 GLuint createProgram(GLuint vs_ID, GLuint fs_ID);
-void drawSpirvDemo(GLuint programID, GLuint texID, GLuint texLOC, df::VaoArrays& vao);
+void drawRawOgl(GLuint programID, GLuint texID, GLuint texLOC, df::VaoArrays& vao);
 
 // Clock/performance measure (needs to be global
 std::vector<CSGVMeasurment> measurements;
@@ -40,7 +41,8 @@ int main(int argc, char* args[])
 	//test_libraryA::Abc another_Abc;
 	//another_Abc.origMethodA();
 	raytrace_generation_demo();
-	//spirv_demo();
+	//raw_ogl_demo();
+	//test_double_attach_demo();
 	return 0;
 }
 
@@ -103,8 +105,6 @@ void raytrace_generation_demo()
 	}
 	else
 	{
-		//m_spirv_vsID = loadShader(GL_VERTEX_SHADER, "Shaders/vert.vert");
-		//m_spirv_fsID = loadShader(GL_FRAGMENT_SHADER, "Shaders/frag.frag");
 		m_spirv_vsID = loadShader(GL_VERTEX_SHADER, "Shaders/raytrace.vert");
 		m_spirv_fsID = loadShader(GL_FRAGMENT_SHADER, "Shaders/raytrace.frag");
 
@@ -187,7 +187,7 @@ void raytrace_generation_demo()
 				glUniform3fv(m_loc_cameraPos, 1, &cam.GetEye().x);
 				glUniformMatrix3fv(m_loc_cameraView, 1, GL_FALSE, &cam.GetView()[0][0]);
 
-				drawSpirvDemo(m_spirv_programID, (GLuint)testTex, m_loc_texImg, demoVao);
+				drawRawOgl(m_spirv_programID, (GLuint)testTex, m_loc_texImg, demoVao);
 			}
 		}
 	);
@@ -333,7 +333,7 @@ int main2(int argc, char* args[])
 	return 0;
 }
 
-void spirv_demo()
+void raw_ogl_demo()
 {
 	glm::vec2 iResolution{ 620, 465 };
 	df::Sample sam("Ray Tracing Demo", iResolution.x, iResolution.y, df::Sample::FLAGS::DEFAULT);
@@ -373,7 +373,7 @@ void spirv_demo()
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 			glUseProgram(m_programID);
 
-			drawSpirvDemo(m_programID,(GLuint)testTex,m_loc_tex,demoVao);
+			drawRawOgl(m_programID,(GLuint)testTex,m_loc_tex,demoVao);
 
 			// i dont do:
 			// set framebuffer (optional prob)
@@ -394,6 +394,130 @@ void spirv_demo()
 	glDeleteShader(vs_ID);
 	glDeleteShader(fs_ID);
 	glDeleteProgram(m_programID);
+}
+
+void test_double_attach_demo()
+{
+	glm::vec2 iResolution{ 620, 465 };
+	df::Sample sam("Ray Tracing Demo", iResolution.x, iResolution.y, df::Sample::FLAGS::DEFAULT);
+	// df::Sample simplifies OpenGL, SDL, ImGui, RenderDoc in the render loop, and handles user input via callback member functions in priority queues
+	df::Camera cam;								// Implements a camera event class with handles
+	sam.AddHandlerClass(cam, 5);				// class callbacks will be called to change its state
+	sam.AddHandlerClass<df::ImGuiHandler>(10);	// static handle functions only
+
+	eltecg::ogl::ArrayBuffer MyVBO;	MyVBO.constructMutable(std::vector<glm::vec2>{ {-1, -1}, { 3, -1 }, { -1, 3 }}, GL_STATIC_DRAW);
+	eltecg::ogl::VertexArray MyVAO;	MyVAO.addVBO<glm::vec2>(MyVBO);
+	df::VaoArrays demoVao((GLuint)MyVAO, GL_TRIANGLE_STRIP, 3, 0u); // temporary solution that wraps an ID
+
+	df::TextureCube<> testCubemap("Assets/xpos.png", "Assets/xneg.png", "Assets/ypos.png", "Assets/yneg.png", "Assets/zpos.png", "Assets/zneg.png");
+	df::Texture2D<> testTex = testCubemap[df::X_POS]; // 2D view of a cubemap face
+
+	df::ShaderProgramEditorVF* raytraceProgram;
+
+	cam.SetSpeed(10.0);
+	//cam.LookAt(glm::vec3(12, 8, 8));
+	cam.LookAt(glm::vec3(4, 4, -3));
+
+	auto begin = std::chrono::high_resolution_clock::now();
+	// Set time just to decide auto lol #DELETE
+	auto bef_gen_time = std::chrono::high_resolution_clock::now();
+
+	Application_Initialize();
+	ImFileDialog_Initialize();
+
+	bool use_spirv = true;
+	bool recompile = false;
+	int recompile_count = 0;
+	// Camera related variables
+	bool camera_changed;
+
+	// Spirv mode specific variables
+	GLuint m_spirv_programID;
+	GLuint m_spirv_vsID;
+	GLuint m_spirv_fsID;
+	GLuint m_gen_fsID;
+	// Spirv uniform locations
+	GLuint m_loc_iResolution;
+	GLuint m_loc_iTime;
+	GLuint m_loc_cameraAt;
+	GLuint m_loc_cameraPos;
+	GLuint m_loc_cameraView;
+	// Texture uniform locations
+	GLuint m_loc_texImg;
+
+
+	std::cout << "Double attach declaration test!\n";
+
+	m_spirv_vsID = loadShader(GL_VERTEX_SHADER, "Shaders/raytrace.vert");
+	GLuint test_fs_1 = loadShader(GL_FRAGMENT_SHADER, "Shaders/raytrace_joint_template.frag");
+	GLuint test_fs_2 = loadShader(GL_FRAGMENT_SHADER, "Shaders/raytrace_sdf_linktest.frag");
+
+	GLuint m_programID = glCreateProgram();
+
+	glAttachShader(m_programID, m_spirv_vsID);
+	glAttachShader(m_programID, test_fs_1);
+	glAttachShader(m_programID, test_fs_2);
+
+	// IMPORTANT! Assign atribs before linking
+	glBindAttribLocation(m_programID,
+		0,				// VAO channel index
+		"vs_in_pos");	// shader variable name
+
+	glLinkProgram(m_programID);
+
+	GLint infoLogLength = 0, result = 0;
+	glGetProgramiv(m_programID, GL_LINK_STATUS, &result);
+	glGetProgramiv(m_programID, GL_INFO_LOG_LENGTH, &infoLogLength);
+	if (GL_FALSE == result || infoLogLength != 0)
+	{
+		std::vector<char> VertexShaderErrorMessage(infoLogLength);
+		glGetProgramInfoLog(m_programID, infoLogLength, nullptr, VertexShaderErrorMessage.data());
+		std::cerr << "[glLinkProgram] Shader linking error:\n" << &VertexShaderErrorMessage[0] << std::endl;
+	}
+	m_spirv_programID = m_programID;
+
+
+	m_loc_iResolution = glGetUniformLocation(m_spirv_programID, "iResolution");
+	m_loc_iTime = glGetUniformLocation(m_spirv_programID, "iTime");
+	m_loc_cameraAt = glGetUniformLocation(m_spirv_programID, "cameraAt");
+	m_loc_cameraPos = glGetUniformLocation(m_spirv_programID, "cameraPos");
+	m_loc_cameraView = glGetUniformLocation(m_spirv_programID, "cameraView");
+
+	m_loc_texImg = glGetUniformLocation(m_spirv_programID, "texImg");
+
+	GL_CHECK; //extra opengl error checking in GPU Debug build configuration
+
+	sam.Run([&](float deltaTime) //delta time in ms
+		{
+			camera_changed = cam.Update();
+
+			// Clock stuff
+			auto end = std::chrono::high_resolution_clock::now();
+			auto dur = end - begin;
+			float ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count() / 1000.0;
+
+			// Update resolution in case the window is resized
+			//iResolution = df::Backbuffer.getSize();
+			if (camera_changed)
+				iResolution = cam.GetSize();
+
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+			glUseProgram(m_spirv_programID);
+			// Set uniforms
+			glUniform1f(m_loc_iTime, ms);
+			glUniform2fv(m_loc_iResolution, 1, &iResolution.x);
+			glUniform3fv(m_loc_cameraAt, 1, &cam.GetAt().x);
+			glUniform3fv(m_loc_cameraPos, 1, &cam.GetEye().x);
+			glUniformMatrix3fv(m_loc_cameraView, 1, GL_FALSE, &cam.GetView()[0][0]);
+
+			drawRawOgl(m_spirv_programID, (GLuint)testTex, m_loc_texImg, demoVao);
+		}
+	);
+	glDeleteShader(m_spirv_vsID);
+	glDeleteShader(test_fs_1);
+	glDeleteShader(test_fs_2);
+
+	glDeleteProgram(m_spirv_programID);
 }
 
 GLuint loadShader(GLenum _shaderType, const char* _fileName)
@@ -483,7 +607,7 @@ GLuint createProgram(GLuint vs_ID, GLuint fs_ID)
 	return m_programID;
 }
 
-void drawSpirvDemo(GLuint programID, GLuint texID, GLuint texLOC, df::VaoArrays& vao)
+void drawRawOgl(GLuint programID, GLuint texID, GLuint texLOC, df::VaoArrays& vao)
 {
 	// set uniforms/textures
 	glActiveTexture(GL_TEXTURE0);
