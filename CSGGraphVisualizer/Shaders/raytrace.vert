@@ -1,6 +1,6 @@
-#version 410
+#version 460
 
-in vec2 vs_in_pos;
+layout(location = 0) in vec2 vs_in_pos;
 
 layout(location = 0) out vec2 vs_out_tex;
 

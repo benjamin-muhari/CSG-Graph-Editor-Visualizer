@@ -16,13 +16,18 @@
 #include "dragonfly_spirv_ext.h"
 #include "performance.h"
 
+#include <Dragonfly/detail/Spirver/Spirver.h>
+
 void test1();
 void test_transforms();
 void raytrace_generation_demo();
 void ImFileDialog_Initialize();
 void raw_ogl_demo();
 void test_double_attach_demo();
+std::string getShaderString(const char* _fileName);
 GLuint loadShader(GLenum _shaderType, const char* _fileName);
+GLuint loadShaderSpirv(GLenum _shaderType, const char* _fileName);
+GLuint loadShaderSpirv(GLenum _shaderType, const std::vector<GLuint>& rawSpirv);
 GLuint createProgram(GLuint vs_ID, GLuint fs_ID);
 void drawRawOgl(GLuint programID, GLuint texID, GLuint texLOC, df::VaoArrays& vao);
 
@@ -69,17 +74,8 @@ void raytrace_generation_demo()
 	cam.LookAt(glm::vec3(4, 4, -3));
 
 	auto begin = std::chrono::high_resolution_clock::now();
-	// Set time just to decide auto lol #DELETE
+	// Set time just to decide auto lol TODO: DELETE
 	auto bef_gen_time = std::chrono::high_resolution_clock::now();
-
-	Application_Initialize();
-	ImFileDialog_Initialize();
-
-	bool use_spirv = true;
-	bool recompile = false;
-	int recompile_count = 0;
-	// Camera related variables
-	bool camera_changed;
 
 	// Spirv mode specific variables
 	GLuint m_spirv_programID;
@@ -95,20 +91,64 @@ void raytrace_generation_demo()
 	// Texture uniform locations
 	GLuint m_loc_texImg;
 
+	// Renderloop variables
+	bool recompile = false;
+	int recompile_count = 0;
+	bool camera_changed;
+
+	// Usage mode variables
+	bool use_dragonfly = false;
+	bool use_spirv = true;
+	bool generate_spirv_shaders = true;
+
 	//std::cout << "Use spirv?(1/0): ";
 	//std::cin >> use_spirv;
 	//std::cout << "\n";
-	if (!use_spirv)
+	if (!use_spirv && use_dragonfly)
 	{
 		raytraceProgram = new df::ShaderProgramEditorVF("Ray tracing demo shader program");
 		*raytraceProgram << "Shaders/raytrace.vert"_vert << "Shaders/raytrace.frag"_frag << df::LinkProgram;
 	}
 	else
 	{
-		m_spirv_vsID = loadShader(GL_VERTEX_SHADER, "Shaders/raytrace.vert");
-		m_spirv_fsID = loadShader(GL_FRAGMENT_SHADER, "Shaders/raytrace.frag");
+		if (use_spirv)
+		{
+			if (generate_spirv_shaders)
+			{
+				std::vector<GLuint> spirv_bin_vs;
+				std::vector<GLuint> spirv_bin_fs;
 
-		m_spirv_programID = createProgram(m_spirv_vsID, m_spirv_fsID);
+				Spirver::Init();
+				if (Spirver::glslToSpirv(getShaderString("Shaders/raytrace.vert"), spirv_bin_vs, Spirver::Stage::Vertex))
+					std::cout << "Successfully converted Shaders/raytrace.vert to spirv binary!\n";
+				else
+					std::cout << "Failed to convert Shaders/raytrace.vert to spirv binary!\n";
+
+				if (Spirver::glslToSpirv(getShaderString("Shaders/raytrace.frag"), spirv_bin_fs, Spirver::Stage::Fragment))
+					std::cout << "Successfully converted Shaders/raytrace.frag to spirv binary!\n";
+				else
+					std::cout << "Failed to convert Shaders/raytrace.frag to spirv binary!\n";
+				Spirver::Clean();
+
+				m_spirv_vsID = loadShaderSpirv(GL_VERTEX_SHADER, spirv_bin_vs);
+				m_spirv_fsID = loadShaderSpirv(GL_FRAGMENT_SHADER, spirv_bin_fs);
+			}
+			else
+			{
+				// TODO: The .spv files are not saved atm
+				m_spirv_vsID = loadShaderSpirv(GL_VERTEX_SHADER, "Shaders/raytrace_vert.spv");
+				m_spirv_fsID = loadShaderSpirv(GL_FRAGMENT_SHADER, "Shaders/raytrace_frag.spv");
+			}
+
+			m_spirv_programID = createProgram(m_spirv_vsID, m_spirv_fsID);
+		}
+		else
+		{
+			m_spirv_vsID = loadShader(GL_VERTEX_SHADER, "Shaders/raytrace.vert");
+			m_spirv_fsID = loadShader(GL_FRAGMENT_SHADER, "Shaders/raytrace.frag");
+
+			m_spirv_programID = createProgram(m_spirv_vsID, m_spirv_fsID);
+		}
 
 		m_loc_iResolution = glGetUniformLocation(m_spirv_programID, "iResolution");
 		m_loc_iTime = glGetUniformLocation(m_spirv_programID, "iTime");
@@ -120,6 +160,9 @@ void raytrace_generation_demo()
 	}
 
 	GL_CHECK; //extra opengl error checking in GPU Debug build configuration
+
+	Application_Initialize();
+	ImFileDialog_Initialize();
 
 	sam.Run([&](float deltaTime) //delta time in ms
 		{
@@ -145,7 +188,7 @@ void raytrace_generation_demo()
 			recompile = Application_Frame();
 			if (recompile)
 			{
-				if (!use_spirv)
+				if (!use_spirv && use_dragonfly)
 				{
 					delete raytraceProgram;
 					raytraceProgram = new df::ShaderProgramEditorVF("Ray tracing demo shader program");
@@ -164,7 +207,7 @@ void raytrace_generation_demo()
 			if (camera_changed)
 				iResolution = cam.GetSize();
 
-			if (!use_spirv)
+			if (!use_spirv && use_dragonfly)
 			{
 				df::Backbuffer << df::Clear() << *raytraceProgram << "iResolution" << iResolution
 					<< "iTime" << ms
@@ -194,7 +237,7 @@ void raytrace_generation_demo()
 
 	Application_Finalize();
 
-	if (use_spirv)
+	if (use_spirv || !use_dragonfly)
 	{
 		glDeleteShader(m_spirv_vsID);
 		glDeleteShader(m_spirv_fsID);
@@ -520,6 +563,27 @@ void test_double_attach_demo()
 	glDeleteProgram(m_spirv_programID);
 }
 
+std::string getShaderString(const char* _fileName)
+{
+	std::string shaderCode = "";
+
+	std::ifstream shaderStream(_fileName);
+	if (!shaderStream.is_open())
+	{
+		std::cerr << "[std::ifstream] Error during the reading of " << _fileName << " shaderfile's source!\n";
+		return "";
+	}
+
+	std::string line = "";
+	while (std::getline(shaderStream, line))
+	{
+		shaderCode += line + "\n";
+	}
+	shaderStream.close();
+
+	return shaderCode;
+}
+
 GLuint loadShader(GLenum _shaderType, const char* _fileName)
 {
 	// shader azonosito letrehozasa
@@ -571,10 +635,113 @@ GLuint loadShader(GLenum _shaderType, const char* _fileName)
 	if (GL_FALSE == result)
 	{
 		// hibauzenet elkerese es kiirasa
-		std::vector<char> VertexShaderErrorMessage(infoLogLength);
-		glGetShaderInfoLog(loadedShader, infoLogLength, nullptr, &VertexShaderErrorMessage[0]);
+		std::vector<char> ShaderErrorMessage(infoLogLength);
+		glGetShaderInfoLog(loadedShader, infoLogLength, nullptr, &ShaderErrorMessage[0]);
 
-		std::cerr << "[glCompileShader] Shader compilation error in " << _fileName << ":\n" << &VertexShaderErrorMessage[0] << std::endl;
+		std::cerr << "[glCompileShader] Shader compilation error in " << _fileName << ":\n" << &ShaderErrorMessage[0] << std::endl;
+	}
+
+	return loadedShader;
+}
+
+GLuint loadShaderSpirv(GLenum _shaderType, const char* _fileName)
+{
+	// shader azonosito letrehozasa
+	GLuint loadedShader = glCreateShader(_shaderType);
+
+	// ha nem sikerult hibauzenet es -1 visszaadasa
+	if (loadedShader == 0)
+	{
+		std::cerr << "[glCreateShader] Error during the initialization of shader: " << _fileName << "!\n";
+		return 0;
+	}
+
+	std::ifstream shaderStream(_fileName, std::ios::binary);
+	// Check if the file is successfully opened
+	if (!shaderStream.is_open())
+	{
+		std::cerr << "[std::ifstream] Error during the reading of " << _fileName << " shaderfile's source!\n";
+		return 0;
+	}
+	// Get the file size
+	shaderStream.seekg(0, std::ios::end);
+	std::streamsize fileSize = shaderStream.tellg();
+	shaderStream.seekg(0, std::ios::beg);
+
+	// Create a vector to store the data
+	std::vector<unsigned char> rawSpirv(fileSize);
+
+	// Read data from file into vector
+	if (!shaderStream.read(reinterpret_cast<char*>(rawSpirv.data()), fileSize)) {
+		// Handle error, maybe throw an exception
+		std::cerr << "Failed to read binary data from file: " << _fileName;
+		return 0;
+	}
+	// Close the file
+	shaderStream.close();
+
+	// Apply the shader binary SPIR-V code to the shader object.
+	glShaderBinary(1, &loadedShader, GL_SHADER_BINARY_FORMAT_SPIR_V, rawSpirv.data(), rawSpirv.size() * sizeof(unsigned char));
+
+	// Specialize the shader, no specialization constants in our case
+	std::string vsEntrypoint = "main"; // Get VS entry point name
+	glSpecializeShader(loadedShader, (const GLchar*)vsEntrypoint.c_str(), 0, nullptr, nullptr);
+
+	// ellenorizzuk, hogy sikerult-e a forditas
+	GLint result = GL_FALSE;
+	int infoLogLength;
+
+	// forditas statuszanak lekerdezese
+	glGetShaderiv(loadedShader, GL_COMPILE_STATUS, &result);
+	glGetShaderiv(loadedShader, GL_INFO_LOG_LENGTH, &infoLogLength);
+
+	if (GL_FALSE == result)
+	{
+		// hibauzenet elkerese es kiirasa
+		std::vector<char> ShaderErrorMessage(infoLogLength);
+		glGetShaderInfoLog(loadedShader, infoLogLength, nullptr, &ShaderErrorMessage[0]);
+
+		std::cerr << "[glCompileShader] Shader compilation error in " << _fileName << ":\n" << &ShaderErrorMessage[0] << std::endl;
+	}
+
+	return loadedShader;
+}
+
+GLuint loadShaderSpirv(GLenum _shaderType, const std::vector<GLuint>& rawSpirv)
+{
+	// shader azonosito letrehozasa
+	GLuint loadedShader = glCreateShader(_shaderType);
+
+	// ha nem sikerult hibauzenet es -1 visszaadasa
+	if (loadedShader == 0)
+	{
+		std::cerr << "[glCreateShader] Error during the initialization of shader from binary in memory data!\n";
+		return 0;
+	}
+
+	// Apply the shader binary SPIR-V code to the shader object.
+	glShaderBinary(1, &loadedShader, GL_SHADER_BINARY_FORMAT_SPIR_V, rawSpirv.data(), rawSpirv.size() * sizeof(GLuint));
+
+	// Specialize the shader, no specialization constants in our case
+	std::string vsEntrypoint = "main"; // Get VS entry point name
+	glSpecializeShader(loadedShader, (const GLchar*)vsEntrypoint.c_str(), 0, nullptr, nullptr);
+
+	// ellenorizzuk, hogy sikerult-e a forditas
+	GLint result = GL_FALSE;
+	int infoLogLength;
+
+	// forditas statuszanak lekerdezese
+	glGetShaderiv(loadedShader, GL_COMPILE_STATUS, &result);
+	glGetShaderiv(loadedShader, GL_INFO_LOG_LENGTH, &infoLogLength);
+
+	if (GL_FALSE == result)
+	{
+		// hibauzenet elkerese es kiirasa
+		std::vector<char> ShaderErrorMessage(infoLogLength);
+		glGetShaderInfoLog(loadedShader, infoLogLength, nullptr, &ShaderErrorMessage[0]);
+
+		std::cerr << "[glCompileShader] Shader compilation error when compiling SPIRV shader from binary in memory data!\n"
+			<< &ShaderErrorMessage[0] << std::endl;
 	}
 
 	return loadedShader;
