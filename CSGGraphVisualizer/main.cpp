@@ -13,10 +13,10 @@
 #include "application.h"
 #include "ImFileDialog/ImFileDialog.h"
 
-#include "dragonfly_spirv_ext.h"
 #include "performance.h"
 
-#include <Dragonfly/detail/Spirver/Spirver.h>
+//#include <Dragonfly/detail/Spirver/Spirver.h>
+#include "Spirv/Spirver_ext.h"
 #include <spirv-tools/linker.hpp>
 
 void test1();
@@ -26,7 +26,7 @@ void ImFileDialog_Initialize();
 void raw_ogl_demo();
 void test_double_attach_demo();
 std::string getShaderString(const char* _fileName);
-void getSpirvBinary(const char* _fileName, std::vector<GLuint>& result, Spirver::Stage shader_stage);
+void getSpirvBinary(const char* _fileName, std::vector<GLuint>& result, Spirver_ext::Stage shader_stage);
 void combineSpirvBinaries(std::vector<std::vector<GLuint>*> input_bins, std::vector<GLuint>& result);
 GLuint loadShader(GLenum _shaderType, const char* _fileName);
 GLuint loadShaderSpirv(GLenum _shaderType, const char* _fileName);
@@ -43,14 +43,9 @@ int main(int argc, char* args[])
 	//main2(argc,args);
 	//test_transforms();
 	//raytrace_demo();
-	// 
-	//df_ext::Abc an_Abc;
-	//an_Abc.origMethodA();
-	//test_libraryA::Abc another_Abc;
-	//another_Abc.origMethodA();
-	//raytrace_generation_demo();
+	raytrace_generation_demo();
 	//raw_ogl_demo();
-	test_double_attach_demo();
+	//test_double_attach_demo();
 	return 0;
 }
 
@@ -116,13 +111,13 @@ void raytrace_generation_demo()
 	{
 		if (use_spirv)
 		{
-			Spirver::Init();
+			Spirver_ext::Init();
 			if (generate_spirv_shaders)
 			{
 				std::vector<GLuint> spirv_bin_vs;
 				std::vector<GLuint> spirv_bin_fs;
-				getSpirvBinary("Shaders/raytrace.vert", spirv_bin_vs, Spirver::Stage::Vertex);
-				getSpirvBinary("Shaders/raytrace.frag", spirv_bin_fs, Spirver::Stage::Fragment);
+				getSpirvBinary("Shaders/raytrace.vert", spirv_bin_vs, Spirver_ext::Stage::Vertex);
+				getSpirvBinary("Shaders/raytrace.frag", spirv_bin_fs, Spirver_ext::Stage::Fragment);
 				m_spirv_vsID = loadShaderSpirv(GL_VERTEX_SHADER, spirv_bin_vs);
 				m_spirv_fsID = loadShaderSpirv(GL_FRAGMENT_SHADER, spirv_bin_fs);
 			}
@@ -195,15 +190,12 @@ void raytrace_generation_demo()
 					
 					if (use_spirv)
 					{
-						GLuint test_fs_1 = loadShader(GL_FRAGMENT_SHADER, "Shaders/raytrace_joint_template.frag");
-						GLuint test_fs_2 = loadShader(GL_FRAGMENT_SHADER, "Shaders/raytrace_sdf_linktest.frag");
-
 						std::vector<GLuint> spirv_bin_template_fs;
 						std::vector<GLuint> spirv_bin_sdf_fs;
 						std::vector<GLuint> spirv_bin_combined_fs;
 
-						getSpirvBinary("Shaders/raytrace_joint_template.frag", spirv_bin_template_fs, Spirver::Stage::Fragment);
-						getSpirvBinary("Shaders/raytrace_sdf_linktest.frag", spirv_bin_sdf_fs, Spirver::Stage::Fragment);
+						getSpirvBinary("Shaders/raytrace_joint_template.frag", spirv_bin_template_fs, Spirver_ext::Stage::Fragment);
+						getSpirvBinary("Shaders/raytrace_sdf_linktest.frag", spirv_bin_sdf_fs, Spirver_ext::Stage::Fragment);
 						std::vector<std::vector<GLuint>*> spirv_bins = {&spirv_bin_template_fs, &spirv_bin_sdf_fs};
 						
 						combineSpirvBinaries(spirv_bins, spirv_bin_combined_fs);
@@ -256,7 +248,7 @@ void raytrace_generation_demo()
 	Application_Finalize();
 
 	if (use_spirv)
-		Spirver::Clean();
+		Spirver_ext::Clean();
 
 	if (use_spirv || !use_dragonfly)
 	{
@@ -535,11 +527,11 @@ void test_double_attach_demo()
 		// Use compile-only option trough API somehow, or generate spirv with non api version
 		// but idk why or how useful
 		//
-		Spirver::Init();
+		Spirver_ext::Init();
 		std::vector<GLuint> spirv_bin_fs_render;
 		std::vector<GLuint> spirv_bin_fs_sdf;
-		getSpirvBinary("Shaders/raytrace_joint_template.frag", spirv_bin_fs_render, Spirver::Stage::Fragment);
-		getSpirvBinary("Shaders/raytrace_sdf_linktest.frag", spirv_bin_fs_sdf, Spirver::Stage::Fragment);
+		getSpirvBinary("Shaders/raytrace_joint_template.frag", spirv_bin_fs_render, Spirver_ext::Stage::Fragment);
+		getSpirvBinary("Shaders/raytrace_sdf_linktest.frag", spirv_bin_fs_sdf, Spirver_ext::Stage::Fragment);
 
 		m_spirv_vsID = loadShaderSpirv(GL_VERTEX_SHADER, "Shaders/raytrace.vert.spv");
 		test_fs_1 = loadShaderSpirv(GL_FRAGMENT_SHADER, spirv_bin_fs_render);
@@ -618,7 +610,7 @@ void test_double_attach_demo()
 	glDeleteShader(test_fs_2);
 
 	glDeleteProgram(m_spirv_programID);
-	Spirver::Clean();
+	Spirver_ext::Clean();
 }
 
 std::string getShaderString(const char* _fileName)
@@ -642,9 +634,9 @@ std::string getShaderString(const char* _fileName)
 	return shaderCode;
 }
 
-void getSpirvBinary(const char* _fileName, std::vector<GLuint>& result, Spirver::Stage shader_stage)
+void getSpirvBinary(const char* _fileName, std::vector<GLuint>& result, Spirver_ext::Stage shader_stage)
 {
-	if (Spirver::glslToSpirv(getShaderString(_fileName), result, shader_stage))
+	if (Spirver_ext::glslToSpirv(getShaderString(_fileName), result, shader_stage))
 		std::cout << "Successfully converted " << _fileName << " to spirv binary!\n";
 	else
 		std::cout << "Failed to convert " << _fileName << " to spirv binary!\n";

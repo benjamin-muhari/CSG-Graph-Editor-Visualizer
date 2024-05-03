@@ -23,6 +23,9 @@
     <Filter Include="ImFileDialog">
       <UniqueIdentifier>{e1da9e10-627f-4167-8382-160b6808c2d9}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Spirv">
+      <UniqueIdentifier>{35cdf05d-b35e-4d74-bfd6-4f0df65a618c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -78,8 +81,9 @@
     <ClCompile Include="ImFileDialog\ImFileDialog.cpp">
       <Filter>ImFileDialog</Filter>
     </ClCompile>
-    <ClCompile Include="dragonfly_spirv_ext.cpp" />
-    <ClCompile Include="performance.cpp" />
+    <ClCompile Include="Spirv\Spirver_ext.cpp">
+      <Filter>Spirv</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="ImguiNodeEditor\imgui_bezier_math.inl">
@@ -169,7 +173,9 @@
     <ClInclude Include="ImFileDialog\stb_image.h">
       <Filter>ImFileDialog</Filter>
     </ClInclude>
-    <ClInclude Include="dragonfly_spirv_ext.h" />
     <ClInclude Include="performance.h" />
+    <ClInclude Include="Spirv\Spirver_ext.h">
+      <Filter>Spirv</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
